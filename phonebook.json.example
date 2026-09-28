@@ -1,0 +1,7 @@
+[
+  {"number": "1988", "name": "Vertrauen", "desc": "Heimat von Synchronet, seit 1988 (USA)", "host": "vert.synchro.net", "port": 23},
+  {"number": "1994", "name": "A-Net Online", "desc": "Hunderte Door-Games, seit 1994 (USA)", "host": "bbs.a-net.online", "port": 1337},
+  {"number": "2001", "name": "The Agency", "desc": "Heimat von fsxNet (Neuseeland)", "host": "agency.bbs.nz", "port": 23},
+  {"number": "3000", "name": "The Throwback BBS", "desc": "Heimat von DoorParty", "host": "bbs.throwbackbbs.com", "port": 23},
+  {"number": "4000", "name": "Horizon BBS", "desc": "Synchronet, online seit 1994", "host": "bbs.horizonbbs.org", "port": 23}
+]

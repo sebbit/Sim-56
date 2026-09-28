@@ -1,0 +1,2386 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SIM-56 · Modem-Handshake-Synthesizer</title>
+<style>
+:root{
+  --bg:#cfc6ad; --bg2:#c4bba1; --plastic:#ddd5bd; --plastic-hi:#ebe5d2; --plastic-lo:#a99f84;
+  --ink:#2b271f; --muted:#665e4d; --line:#a2977c;
+  --screen:#0a0d0b; --screen-ink:#a4f5b4; --screen-dim:#4a7a55;
+  --tx:#ffb341; --rx:#5cf08a; --sys:#9db8ff; --warn:#ff5b4a;
+  --led-off:#3a2f24; --btn:#2b271f; --btn-ink:#ebe5d2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1a1916; --bg2:#22201c; --plastic:#2a2823; --plastic-hi:#34312b; --plastic-lo:#141310;
+    --ink:#e2dccb; --muted:#968e7b; --line:#3d3a32;
+    --led-off:#2c2620; --btn:#e2dccb; --btn-ink:#1a1916;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1a1916; --bg2:#22201c; --plastic:#2a2823; --plastic-hi:#34312b; --plastic-lo:#141310;
+  --ink:#e2dccb; --muted:#968e7b; --line:#3d3a32;
+  --led-off:#2c2620; --btn:#e2dccb; --btn-ink:#1a1916;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:Bahnschrift,"DIN Alternate","DIN 2014","Roboto Condensed","Arial Narrow",system-ui,sans-serif;
+  font-size:15px;line-height:1.45}
+.wrap{max-width:1100px;margin:0 auto;padding:18px 16px 40px}
+.mono{font-family:ui-monospace,"Cascadia Mono","DejaVu Sans Mono",Menlo,Consolas,monospace}
+
+.face{background:linear-gradient(180deg,var(--plastic-hi),var(--plastic) 40%,var(--plastic) 70%,var(--plastic-lo));
+  border-radius:14px 14px 22px 22px;padding:16px 20px 18px;
+  box-shadow:0 1px 0 var(--plastic-hi) inset,0 -3px 0 var(--plastic-lo) inset,0 10px 24px -14px #0008;
+  display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center}
+.brand{line-height:1.05}
+.brand b{display:block;font-size:26px;letter-spacing:.02em;font-weight:700}
+.brand span{font-size:12.5px;color:var(--muted)}
+.leds{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.led{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.led i{width:11px;height:11px;border-radius:50%;background:var(--led-off);box-shadow:inset 0 1px 2px #0007}
+.led.on i{background:var(--c,#ff4b3a);box-shadow:0 0 8px var(--c,#ff4b3a),0 0 2px #fff8 inset}
+.lcd{background:#1b2412;color:#b8f36a;border-radius:4px;padding:6px 10px;min-width:9.5ch;text-align:right;white-space:nowrap;
+  font-size:20px;letter-spacing:.08em;box-shadow:inset 0 2px 5px #000b;text-shadow:0 0 6px #b8f36a88}
+
+.screen{background:var(--screen);border-radius:10px;position:relative;overflow:hidden;
+  box-shadow:inset 0 0 0 1px #ffffff10,0 8px 20px -14px #000}
+.spec-wrap{margin-top:16px;display:grid;grid-template-columns:44px 1fr}
+.axis{position:relative;color:var(--screen-dim);font-size:11px}
+.axis span{position:absolute;right:6px;transform:translateY(-50%)}
+#spec{display:block;width:100%;height:260px}
+.spec-cap{position:absolute;left:54px;top:10px;color:var(--screen-dim);font-size:12px;pointer-events:none}
+.spec-cap b{color:var(--screen-ink);font-weight:400}
+
+.timeline{margin-top:10px;position:relative;height:38px;border-radius:6px;background:var(--bg2);cursor:pointer;overflow:hidden;box-shadow:inset 0 1px 3px #0003}
+.seg{position:absolute;top:0;bottom:0;display:flex;align-items:center;padding:0 6px;font-size:11.5px;white-space:nowrap;overflow:hidden;color:#1c1a15;border-right:1px solid #0003}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);left:0;pointer-events:none}
+.tl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center;padding:0 10px}
+
+.grid{margin-top:16px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px}
+.term{display:flex;flex-direction:column;height:460px;padding:0}
+.term::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.22) 2px 3px);border-radius:10px}
+#log{flex:1;overflow-y:auto;padding:12px 14px;font-size:13px;color:var(--screen-ink);line-height:1.5}
+#log div{white-space:pre-wrap;word-break:break-word}
+#log .ts{color:var(--screen-dim)}
+#log .tx{color:var(--tx)} #log .rx{color:var(--rx)} #log .sys{color:var(--sys)}
+#log .cmd{color:#fff} #log .res{color:#fff;font-weight:700} #log .err{color:var(--warn)}
+#log .host{color:#b9ffc6;text-shadow:0 0 6px #5cf08a99;font-size:14px}
+#log .echo{color:#ffd28a;text-shadow:0 0 6px #ffb34177;font-size:14px}
+.prompt{display:flex;border-top:1px solid #ffffff14;position:relative;z-index:1}
+.prompt label{padding:10px 0 10px 14px;color:var(--screen-dim);font-size:14px;min-width:2.2em}
+#cmd{flex:1;background:transparent;border:0;color:#fff;font-size:15px;padding:10px 10px;outline:none;min-width:0}
+.prompt:focus-within{box-shadow:inset 0 0 0 2px var(--tx)}
+.side{display:flex;flex-direction:column;gap:16px}
+#const{display:block;width:100%;aspect-ratio:1/1;max-height:300px}
+#scope{display:block;width:100%;height:110px}
+.cap{position:absolute;left:10px;top:8px;font-size:12px;color:var(--screen-dim);pointer-events:none;max-width:calc(100% - 20px)}
+.cap b{color:var(--screen-ink);font-weight:400}
+.bits{padding:8px 12px;font-size:13px;color:var(--screen-dim);min-height:34px;white-space:pre;overflow:hidden}
+.bits em{font-style:normal;color:#fff;background:#ffffff22}
+
+.controls{margin-top:16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border-radius:999px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);padding:7px 14px;font-size:14px}
+button.primary{background:var(--btn);color:var(--btn-ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--tx);outline-offset:2px}
+select,.wd input{font:inherit;font-size:14px;background:var(--plastic);color:var(--ink);border:1.5px solid var(--line);border-radius:6px;padding:6px 8px}
+.opt{display:flex;align-items:center;gap:6px;font-size:14px}
+.opt input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
+
+.wd{margin-top:18px;border-top:1.5px solid var(--line);padding-top:14px}
+.wd-row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+.wd-row h2{font-size:17px;margin:0 6px 0 0}
+.wd input{width:6.5ch;font-family:ui-monospace,Menlo,Consolas,monospace}
+.wd-res{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+.wd-res .r{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;padding:4px 9px;border-radius:5px;background:var(--bg2);color:var(--muted)}
+.wd-res button.r{border:1.5px solid var(--ink);color:var(--ink);background:var(--plastic-hi);border-radius:5px;font-weight:700}
+.wd-hint{font-size:13px;color:var(--muted);margin-top:8px}
+
+.note{margin-top:22px;color:var(--muted);font-size:13.5px;max-width:78ch}
+.note p{margin:.4em 0}
+
+@media (max-width:760px){
+  .face{grid-template-columns:1fr auto;gap:12px}
+  .leds{grid-column:1 / -1;order:3;justify-content:space-between;gap:6px}
+  .grid{grid-template-columns:1fr}
+  #spec{height:190px}
+  .term{height:400px}
+  .brand b{font-size:22px}
+}
+@media (prefers-reduced-motion:reduce){ .led.on i{box-shadow:none} }
+
+.crt{margin-top:16px;padding:0}
+.crt[hidden]{display:none}
+.crt::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:10px;
+  background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.18) 2px 3px)}
+.crt-head{display:flex;justify-content:space-between;gap:12px;padding:9px 14px 4px;font-size:12px;color:var(--screen-dim)}
+.crt-head span:last-child{color:var(--screen-ink)}
+.crt-scroll{overflow-x:auto}
+.crt-inner{position:relative;min-width:600px;padding:6px 12px 10px}
+#crtC{display:block;width:100%;aspect-ratio:16/10;border-radius:6px;background:#000;cursor:text}
+.zm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);z-index:2}
+.zm[hidden]{display:none}
+.zm-box{background:#0000aa;color:#fff;border:4px double #aaaaaa;padding:12px 16px;width:min(380px,92%);font-size:13px;line-height:1.5;box-shadow:8px 8px 0 #000}
+.zm-title{background:#aaaaaa;color:#0000aa;margin:-12px -16px 10px;padding:2px 16px;font-weight:700}
+.zm-row{display:flex;justify-content:space-between;gap:16px}
+.zm-row b{color:#ffff55;font-weight:400;text-align:right}
+.zm-bar{height:14px;background:#000055;margin:8px 0;border:1px solid #5555ff}
+.zm-bar i{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,#55ffff 0 6px,#00aaaa 6px 8px)}
+.zm-log{font-size:12px;color:#aaaaaa;min-height:7.5em;white-space:pre;overflow:hidden}
+.zm-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.zm-btns button{border-radius:0;border:1px solid #fff;color:#fff;background:#0000aa;padding:3px 10px;font-size:13px;font-family:inherit}
+.zm-btns button.on{background:#aaaaaa;color:#0000aa}
+.crt .prompt{border-top:1px solid #ffffff14}
+.opt[hidden],.srv[hidden],.pb[hidden]{display:none}
+.pb{margin-top:12px;border-top:0;padding-top:0}
+.srv{margin-top:10px;font-size:12.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="face" role="group" aria-label="Modem-Frontblende">
+    <div class="brand"><b>SIM-56</b><span>von Bell 103 bis V.90 · Daten und Fax</span></div>
+    <div class="leds" id="leds"></div>
+    <div class="lcd mono" id="lcd" aria-live="polite">READY</div>
+  </div>
+
+  <div class="screen spec-wrap">
+    <div class="axis mono" id="axis"></div>
+    <canvas id="spec" aria-label="Spektrogramm 0 bis 4 kHz"></canvas>
+    <div class="spec-cap mono">Spektrogramm 0–4 kHz · <b id="phaseName">Leitung frei</b></div>
+  </div>
+
+  <div class="timeline" id="timeline" title="Klicken, um zu einer Phase zu springen">
+    <div class="tl-empty">Wähle eine Nummer, dann erscheint hier der Ablauf des Verbindungsaufbaus</div>
+  </div>
+
+  <section class="screen crt" id="crt" hidden aria-label="Terminal">
+    <div class="crt-head mono"><span id="crtTitle">Terminal</span><span id="crtStat"></span></div>
+    <div class="crt-scroll"><div class="crt-inner">
+      <canvas id="crtC" aria-label="80x25-Terminal mit ANSI-Grafik"></canvas>
+      <div class="zm" id="zm" hidden>
+        <div class="zm-box mono" role="dialog" aria-label="Zmodem-Download">
+          <div class="zm-title">Zmodem-Download</div>
+          <div id="zmBody"></div>
+          <div class="zm-bar"><i id="zmBar"></i></div>
+          <div class="zm-log" id="zmLog"></div>
+          <div class="zm-btns"><button data-s="1">×1</button><button data-s="10">×10</button><button data-s="100">×100</button><button data-s="0">Abbrechen</button></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <div class="controls">
+    <div class="chips">
+      <button class="primary" id="btnDial">Wählen</button>
+      <button id="btnHang">Auflegen</button>
+    </div>
+    <label class="opt">Standard
+      <select id="std">
+        <option value="v90">V.90 · 56k</option>
+        <option value="v34">V.34 · 33,6k</option>
+        <option value="v32b">V.32bis · 14,4k</option>
+        <option value="v22b">V.22bis · 2400</option>
+        <option value="v23">V.23 · 1200/75 (Btx)</option>
+        <option value="v21">V.21 · 300</option>
+        <option value="b103">Bell 103 · 300</option>
+        <option value="fax">Fax G3 · V.29</option>
+      </select>
+    </label>
+    <label class="opt">Wahl
+      <select id="dialMode">
+        <option value="T">Tonwahl</option>
+        <option value="P">Wählscheibe</option>
+      </select>
+    </label>
+    <label class="opt">Netz
+      <select id="region">
+        <option value="de">Deutschland</option>
+        <option value="us">USA</option>
+      </select>
+    </label>
+    <label class="opt" id="peerWrap" hidden>Gegenstelle
+      <select id="peer">
+        <option value="server">Server-BBS</option>
+        <option value="local">eingebaut</option>
+      </select>
+    </label>
+    <label class="opt"><input type="checkbox" id="optLine" checked>Telefonband 300–3400 Hz</label>
+    <label class="opt"><input type="checkbox" id="optCoupler">Akustikkoppler</label>
+    <label class="opt"><input type="checkbox" id="optNoise" checked>Leitungsrauschen</label>
+    <label class="opt"><input type="checkbox" id="optM2" checked>Nach CONNECT weiterhören (ATM2)</label>
+  </div>
+
+  <div class="srv mono" id="srvInfo" hidden></div>
+  <div class="wd pb" id="pbWrap" hidden>
+    <div class="wd-row"><h2>Telefonbuch</h2><span class="wd-hint" style="margin:0">Echte Mailboxen im Internet – dein Server wählt per Telnet weiter.</span></div>
+    <div class="wd-res" id="pbRes"></div>
+  </div>
+
+  <div class="grid">
+    <div class="screen term mono" id="termPanel">
+      <div id="log" aria-live="polite"></div>
+      <div class="prompt" id="promptRow"><label for="cmd" id="promptLbl">&gt;</label><input id="cmd" value="ATDT0191011" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Eingabe"></div>
+    </div>
+    <div class="side">
+      <div class="screen">
+        <canvas id="const" aria-label="Konstellations- und Zeigerdiagramm"></canvas>
+        <div class="cap mono">IQ-Ebene · <b id="constLbl">kein Signal</b></div>
+        <div class="bits mono" id="bits">&nbsp;</div>
+      </div>
+      <div class="screen">
+        <canvas id="scope" aria-label="Oszilloskop"></canvas>
+        <div class="cap mono">Oszilloskop</div>
+      </div>
+    </div>
+  </div>
+
+  <section class="wd" aria-label="Wardialer">
+    <div class="wd-row">
+      <h2>Wardialer</h2>
+      <label class="opt">Vorwahl <input id="wdPre" value="555" inputmode="numeric"></label>
+      <label class="opt">von <input id="wdFrom" value="2350" inputmode="numeric"></label>
+      <label class="opt">bis <input id="wdTo" value="2379" inputmode="numeric"></label>
+      <button id="wdBtn">Scan starten</button>
+    </div>
+    <div class="wd-hint">Wählt jede Nummer im Bereich an und hört hin: Freiton, besetzt, Ansage, Mensch – oder ein Modem. Gefundene Modems und Faxe kannst du anklicken.</div>
+    <div class="wd-res" id="wdRes"></div>
+  </section>
+
+  <div class="note">
+    <p>Kein einziges Sample ist aufgenommen. Alles wird zur Laufzeit moduliert: DTMF oder Impulswahl, ANSam, V.8 als V.21-FSK-Rahmen, V.34-INFO als DPSK, Line Probing, Training als raised-cosine-geformtes QPSK/QAM, V.90-DIL, V.32-Ranging mit AC/AA/CA/CC, V.22bis mit Schutzton, T.30-Fax mit HDLC-Rahmen samt Bit-Stuffing und V.29-Seitenübertragung.</p>
+    <p>Nach dem CONNECT öffnet sich das Terminal: ein 80×25-Bildschirm mit ANSI-Farben und IBM-Zeichensatz. Jedes Zeichen kommt mit der echten Leitungsgeschwindigkeit an – bei Bell 103, V.21 und V.23 sogar hörbar als FSK-Rahmen. In der Zeitmaschine-BBS gibt es ein Wiki mit zehn Artikeln, Zmodem-Downloads und eine Bildaufbau-Demo. Mit <span class="mono">+++</span> kommst du in den Befehlsmodus, mit <span class="mono">ATO</span> zurück, mit <span class="mono">ATH</span> legst du auf.</p>
+    <p>Vereinfacht sind Oktett-Inhalte, die Phasenlage der Probing-Töne und die DIL-Sequenz. Frequenzen, Baudraten, Modulationsarten und die Reihenfolge der Signale entsprechen den Standards.</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+const TAU = Math.PI * 2;
+const $ = s => document.querySelector(s);
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function hashStr(s){ let h = 2166136261; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+const DTMF = {'1':[697,1209],'2':[697,1336],'3':[697,1477],'A':[697,1633],'4':[770,1209],'5':[770,1336],'6':[770,1477],'B':[770,1633],
+  '7':[852,1209],'8':[852,1336],'9':[852,1477],'C':[852,1633],'*':[941,1209],'0':[941,1336],'#':[941,1477],'D':[941,1633]};
+
+// FSK modems: [mark, space, baud] for our (originating) side and the answering side
+const FSKCFG = {
+  b103: {tx:[1270,1070,300], rx:[2225,2025,300], rateLabel:'300',     rate:300,  lines:['CONNECT']},
+  v21:  {tx:[980,1180,300],  rx:[1650,1850,300], rateLabel:'300',     rate:300,  lines:['CONNECT 300']},
+  v23:  {tx:[390,450,75],    rx:[1300,2100,1200],rateLabel:'1200/75', rate:1200, lines:['CONNECT 1200/75']},
+};
+
+function rcPulse(t, al){
+  if (Math.abs(t) < 1e-9) return 1;
+  const pt = Math.PI * t, s = Math.sin(pt) / pt, d = 1 - (2 * al * t) ** 2;
+  if (Math.abs(d) < 1e-6) return s * Math.PI / 4;
+  return s * Math.cos(Math.PI * al * t) / d;
+}
+const RC_RES = 512, RC_SPAN = 6, rcCache = {};
+function rcTable(al){
+  if (rcCache[al]) return rcCache[al];
+  const tb = new Float32Array(2 * RC_SPAN * RC_RES + 1);
+  for (let i = 0; i < tb.length; i++) tb[i] = rcPulse(i / RC_RES - RC_SPAN, al);
+  return rcCache[al] = tb;
+}
+
+/* ================= SYNTH CORE ================= */
+function makeSynth(sr, seed, capSec){
+  const rng = mulberry32(seed);
+  const cap = Math.round(sr * capSec);
+  const data = new Float32Array(cap);
+  const events = [], phases = [], logs = [];
+  const S = {sr, rng};
+
+  S.add = (a, t0, g = 1) => {
+    const i0 = Math.round(t0 * sr), n = Math.min(a.length, cap - i0);
+    for (let i = 0; i < n; i++) data[i0 + i] += a[i] * g;
+    return t0 + a.length / sr;
+  };
+  S.ev = e => (events.push(e), e);
+  S.lg = (t, cls, text) => logs.push({t, cls, text});
+  S.ph = (t0, t1, name, color) => phases.push({t0, t1, name, color});
+
+  const fade = S.fade = (a, ms = 4) => {
+    const f = Math.min(Math.floor(sr * ms / 1000), a.length >> 1);
+    for (let i = 0; i < f; i++){ const g = i / f; a[i] *= g; a[a.length - 1 - i] *= g; }
+    return a;
+  };
+  S.tone = (fs, dur, amp, fm = 4) => {
+    const n = Math.round(dur * sr), a = new Float32Array(n);
+    for (let i = 0; i < n; i++){ let s = 0; const t = i / sr; for (const f of fs) s += Math.sin(TAU * f * t); a[i] = amp * s / fs.length; }
+    return fm ? fade(a, fm) : a;
+  };
+  S.toneRev = (f, dur, amp, revAt = []) => {
+    const n = Math.round(dur * sr), a = new Float32Array(n);
+    for (let i = 0; i < n; i++){ const t = i / sr; let fl = 0; for (const r of revAt) if (t >= r) fl++; a[i] = amp * Math.sin(TAU * f * t + (fl & 1) * Math.PI); }
+    return fade(a);
+  };
+  S.click = amp => {
+    const n = Math.round(0.014 * sr), a = new Float32Array(n);
+    for (let i = 0; i < n; i++) a[i] = amp * ((rng() * 2 - 1) * Math.exp(-i / (0.0012 * sr)) + 0.6 * Math.exp(-i / (0.004 * sr)) * Math.sin(TAU * 170 * i / sr));
+    return a;
+  };
+  S.thunk = amp => { // handset pressed into rubber cups
+    const n = Math.round(0.18 * sr), a = new Float32Array(n);
+    for (let i = 0; i < n; i++) a[i] = amp * (Math.sin(TAU * 85 * i / sr) * Math.exp(-i / (0.04 * sr)) + (rng() * 2 - 1) * 0.5 * Math.exp(-i / (0.006 * sr)));
+    return a;
+  };
+  // ANS / ANSam: 2100 Hz, optional 15 Hz AM, optional phase reversal every 450 ms
+  S.ansam = (dur, amp, am = true, rev = true) => {
+    const n = Math.round(dur * sr), a = new Float32Array(n);
+    for (let i = 0; i < n; i++){ const t = i / sr;
+      const env = am ? (1 + 0.2 * Math.sin(TAU * 15 * t)) / 1.2 : 1;
+      a[i] = amp * env * Math.sin(TAU * 2100 * t + (rev ? Math.PI * Math.floor(t / 0.45) : 0)); }
+    return fade(a);
+  };
+  S.fsk = (bits, baud, fMark, fSpace, amp) => {
+    const spb = sr / baud, n = Math.round(bits.length * spb), a = new Float32Array(n);
+    let p = 0;
+    for (let i = 0; i < n; i++){
+      const b = bits.charCodeAt(Math.min(bits.length - 1, Math.floor(i / spb))) === 49;
+      p += TAU * (b ? fMark : fSpace) / sr; a[i] = amp * Math.sin(p);
+    }
+    return fade(a, 3);
+  };
+  S.frame = bytes => bytes.map(b => { let s = '0'; for (let i = 0; i < 8; i++) s += (b >> i) & 1; return s + '1'; }).join('');
+  S.randBits = n => { let s = ''; for (let i = 0; i < n; i++) s += rng() < .5 ? '0' : '1'; return s; };
+  // HDLC for T.30: 0x7E flag preamble, LSB-first bytes, zero-bit stuffing, (dummy) FCS
+  S.hdlc = (frames, pre = 1.0) => {
+    const flag = '01111110';
+    let s = flag.repeat(Math.max(1, Math.round(pre * 300 / 8)));
+    for (const f of frames){
+      let b = '', ones = 0;
+      for (const byte of [...f, (rng() * 256) | 0, (rng() * 256) | 0])
+        for (let k = 0; k < 8; k++){ const bit = (byte >> k) & 1; b += bit; if (bit){ if (++ones === 5){ b += '0'; ones = 0; } } else ones = 0; }
+      s += b + flag;
+    }
+    return s + flag;
+  };
+  S.modulate = (syms, baud, fc, amp, al = 0.3, fm = 6) => {
+    const N = syms.length / 2, sps = sr / baud, n = Math.round(N * sps), a = new Float32Array(n);
+    const tb = rcTable(al), w = TAU * fc / sr, span = RC_SPAN - 1;
+    for (let i = 0; i < n; i++){
+      const x = i / sps - 0.5, kc = Math.round(x);
+      let I = 0, Q = 0;
+      for (let k = kc - span; k <= kc + span; k++){
+        if (k < 0 || k >= N) continue;
+        const h = tb[Math.round((x - k + RC_SPAN) * RC_RES)];
+        I += syms[2 * k] * h; Q += syms[2 * k + 1] * h;
+      }
+      a[i] = amp * (I * Math.cos(w * i) - Q * Math.sin(w * i));
+    }
+    return fm ? fade(a, fm) : a;
+  };
+  S.cat = (...arrs) => { const n = arrs.reduce((s, a) => s + a.length, 0), out = new Float32Array(n); let o = 0; for (const a of arrs){ out.set(a, o); o += a.length; } return out; };
+  S.qamSyms = (N, M) => {
+    const m = Math.round(Math.sqrt(M)), s = new Float32Array(2 * N), nm = 1 / (m - 1);
+    for (let k = 0; k < N; k++){ s[2*k] = (2 * Math.floor(rng() * m) - (m - 1)) * nm; s[2*k+1] = (2 * Math.floor(rng() * m) - (m - 1)) * nm; }
+    return s;
+  };
+  S.dpskSyms = bits => {
+    const s = new Float32Array(bits.length * 2); let p = 0;
+    for (let k = 0; k < bits.length; k++){ if (bits[k] === '1') p += Math.PI; s[2*k] = Math.cos(p); s[2*k+1] = Math.sin(p); }
+    return s;
+  };
+  S.sSyms = (N, inv) => { const s = new Float32Array(2 * N), g = inv ? -1 : 1;
+    for (let k = 0; k < N; k++){ const p = (k & 1) ? Math.PI / 2 : 0; s[2*k] = g * Math.cos(p); s[2*k+1] = g * Math.sin(p); } return s; };
+  S.ppSyms = N => { const s = new Float32Array(2 * N);
+    for (let k = 0; k < N; k++){ const i = k % 48, p = Math.PI * i * i / 48; s[2*k] = Math.cos(p); s[2*k+1] = Math.sin(p); } return s; };
+  const V22INC = {'00': Math.PI/2, '01': 0, '11': 3*Math.PI/2, '10': Math.PI};
+  S.v22Syms = (dibits, st) => {
+    const s = new Float32Array(dibits.length * 2);
+    for (let k = 0; k < dibits.length; k++){ st.p += V22INC[dibits[k]]; s[2*k] = Math.cos(st.p + Math.PI/4); s[2*k+1] = Math.sin(st.p + Math.PI/4); }
+    return s;
+  };
+  S.probe = (dur, amp) => {
+    const fr = [], pv = [];
+    for (let k = 1; k <= 25; k++){ const f = 150 * k; if ([900,1200,1800,2400].includes(f)) continue; fr.push(f); pv.push(Math.PI * k * k / 25); }
+    const val = i => { let s = 0; const t = i / sr; for (let j = 0; j < fr.length; j++) s += Math.cos(TAU * fr[j] * t + pv[j]); return s; };
+    let peak = 1e-9; const per = Math.ceil(sr / 150) + 1;
+    for (let i = 0; i < per; i++) peak = Math.max(peak, Math.abs(val(i)));
+    const n = Math.round(dur * sr), a = new Float32Array(n);
+    for (let i = 0; i < n; i++) a[i] = amp * val(i) / peak;
+    return fade(a);
+  };
+  S.pcm = (dur, amp, kind, fm = 4) => {
+    const n = Math.round(dur * sr), a = new Float32Array(n), N8 = Math.round(dur * 8000), lv = new Float32Array(N8 * 2);
+    let pat = [1,-1,1,1,-1,-1], segI = -1, level = .3;
+    for (let j = 0; j < N8; j++){
+      let v;
+      if (kind === 'dil'){
+        const seg = Math.floor(j / 480);
+        if (seg !== segI){ segI = seg; const L = 4 + Math.floor(rng() * 9); pat = Array.from({length: L}, () => rng() < .5 ? -1 : 1);
+          level = (seg & 1) ? 0.15 + 0.85 * ((seg >> 1) % 12) / 11 : 0.35; }
+        v = level * pat[j % pat.length];
+      } else { const u = rng() * 2 - 1; v = Math.sign(u) * Math.pow(Math.abs(u), 1.6); }
+      lv[2*j] = v;
+    }
+    let y = 0;
+    for (let i = 0; i < n; i++){ const j = Math.min(N8 - 1, Math.floor(i * 8000 / sr)); y += 0.55 * (lv[2*j] - y); a[i] = amp * y; }
+    return {a: fm ? fade(a, fm) : a, levels: lv};
+  };
+  S.mumble = (dur, amp) => { // voice-like: pitched pulse train + noise with syllable envelope
+    const n = Math.round(dur * sr), a = new Float32Array(n);
+    let env = 0, target = 0, next = 0, on = false, lp = 0, bp = 0, ph = 0, f0 = 130;
+    for (let i = 0; i < n; i++){
+      const t = i / sr;
+      if (t >= next){ on = !on; next = t + (on ? 0.08 + rng() * 0.18 : 0.04 + rng() * 0.25); target = on ? 0.5 + rng() * 0.5 : 0; f0 = 110 + rng() * 60; }
+      env += (target - env) * 0.004;
+      ph += f0 / sr; if (ph >= 1) ph -= 1;
+      const src = (ph < 0.08 ? 1 : 0) + (rng() * 2 - 1) * 0.25;
+      lp += 0.25 * (src - lp); bp += 0.08 * (lp - bp);
+      a[i] = amp * env * (lp - bp) * 3;
+    }
+    return fade(a);
+  };
+  S.rotaryWind = n => { // finger turns the dial to the stop: soft friction with ratchet ticks
+    const dur = .2 + n * .06, N = Math.round(dur * sr), a = new Float32Array(N); let lp = 0;
+    for (let i = 0; i < N; i++){ const t = i / sr; lp += 0.05 * ((rng() * 2 - 1) - lp);
+      const tick = (t % 0.028) < 0.0015 ? (rng() * 2 - 1) : 0;
+      a[i] = (lp * 0.9 + tick * 0.2) * (0.6 + 0.4 * Math.sin(Math.PI * t / dur)); }
+    return fade(a, 10);
+  };
+  S.whirr = dur => { // governor whirr while the dial runs back
+    const N = Math.round(dur * sr), a = new Float32Array(N); let lp = 0, bp = 0;
+    for (let i = 0; i < N; i++){ const t = i / sr; lp += 0.2 * ((rng() * 2 - 1) - lp); bp += 0.03 * (lp - bp);
+      const buzz = 0.5 + 0.5 * Math.sin(TAU * 47 * t);
+      a[i] = 0.16 * ((lp - bp) * 2 * (0.5 + 0.5 * buzz) + 0.25 * Math.sin(TAU * 94 * t) * buzz); }
+    return fade(a, 8);
+  };
+  S.finish = (endT, noise) => {
+    const endS = Math.max(1, Math.min(cap, Math.round(endT * sr)));
+    if (noise) for (let i = 0; i < endS; i++) data[i] += (rng() * 2 - 1) * 0.012 + 0.006 * Math.sin(TAU * 50 * i / sr);
+    const out = data.slice(0, endS);
+    let peak = 0; for (let i = 0; i < out.length; i++) peak = Math.max(peak, Math.abs(out[i]));
+    if (peak > .85){ const g = .85 / peak; for (let i = 0; i < out.length; i++) out[i] *= g; }
+    logs.sort((a, b) => a.t - b.t);
+    return {samples: out, dur: out.length / sr, events, phases, logs};
+  };
+  return S;
+}
+
+/* ---------- shared: off-hook, dial tone, dialing ---------- */
+function dialPrefix(S, o, fast){
+  const de = o.region === 'de';
+  let t = 0.12;
+  S.add(S.click(.35), t);
+  S.lg(t, 'sys', 'Hörer ab – Schleifenstrom fließt (OH)');
+  t += 0.15;
+  const dt = de ? [425] : [350, 440], dtd = fast ? 0.45 : 1.3;
+  S.add(S.tone(dt, dtd, .32), t);
+  S.ev({t0: t, t1: t + dtd, dir: 'rx', kind: 'tone', label: 'Wählton', freq: dt});
+  S.lg(t, 'rx', `Wählton ${de ? '425 Hz' : '350 + 440 Hz'}`);
+  S.ph(0, t + dtd, 'Wählton', '#bfb58f');
+  t += dtd + 0.15;
+  const d0 = t;
+  if (o.pulse){
+    S.lg(t, 'tx', `Wählscheibe ${o.number} – 10 Impulse/s, Öffnen/Schließen 60/40 ms`);
+    for (const ch of o.number){
+      if (ch === ','){ t += 2; continue; }
+      if (!/[0-9]/.test(ch)) continue;
+      const n = ch === '0' ? 10 : +ch;
+      const w = S.rotaryWind(n); S.add(w, t); t += w.length / S.sr + 0.07;
+      S.add(S.whirr(n * 0.1 + 0.06), t - 0.02);
+      const p0 = t;
+      for (let p = 0; p < n; p++){ S.add(S.click(.45), t + 0.005); S.add(S.click(.22), t + 0.065); t += 0.1; }
+      S.ev({t0: p0, t1: t, dir: 'tx', kind: 'pulse', label: `Wählscheibe „${ch}“ · ${n} Impulse`});
+      t += 0.25;
+    }
+  } else {
+    const on = fast ? 0.06 : 0.085;
+    S.lg(t, 'tx', `Tonwahl (DTMF) ${o.number}`);
+    for (const ch of o.number){
+      if (ch === ','){ t += 2; continue; }
+      const f = DTMF[ch]; if (!f) continue;
+      S.add(S.tone(f, on, .45), t);
+      S.ev({t0: t, t1: t + on, dir: 'tx', kind: 'tone', label: `DTMF ${ch}`, freq: f});
+      if (!fast) S.lg(t, 'tx', `  ${ch}  →  ${f[0]} + ${f[1]} Hz`);
+      t += on * 2;
+    }
+  }
+  S.ph(d0, t, 'Wahl', '#d8c27a');
+  return t;
+}
+
+/* ================= FULL CALL ================= */
+function buildSession(sr, o){
+  const S = makeSynth(sr, o.seed, 120);
+  const {add, ev, lg, ph, rng, tone, toneRev, click, thunk, ansam, fsk, frame, randBits, hdlc, modulate, cat,
+         qamSyms, dpskSyms, sSyms, ppSyms, v22Syms, probe, pcm} = S;
+  const de = o.region === 'de';
+  let t = dialPrefix(S, o, false);
+  const dEnd = t;
+  t += 1.0;
+  if (o.std === 'fax'){
+    add(tone([1100], .5, .3), dEnd + .5);
+    ev({t0: dEnd + .5, t1: dEnd + 1, dir: 'tx', kind: 'tone', label: 'CNG', freq: [1100]});
+    lg(dEnd + .5, 'tx', 'CNG 1100 Hz – „hier ruft ein Faxgerät an“');
+  }
+  const r0 = t, ringOn = de ? 1.0 : 1.8, ringF = de ? [425] : [440, 480];
+  add(tone(ringF, ringOn, .3), t);
+  ev({t0: t, t1: t + ringOn, dir: 'rx', kind: 'tone', label: 'Freiton', freq: ringF});
+  lg(t, 'rx', `Freiton ${de ? '425 Hz' : '440 + 480 Hz'} – bei der Gegenstelle klingelt es`);
+  t += ringOn + 1.4;
+  add(click(.2), t);
+  lg(t, 'rx', 'Gegenstelle hebt ab');
+  ph(r0, t, 'Ruf', '#e0a66b');
+
+  const hs = {};
+  const coupler = tt => { if (o.coupler){ add(thunk(.45), tt); lg(tt, 'sys', 'Hörer in den Akustikkoppler gedrückt'); } };
+
+  function v34(tStart, isV90){
+    let t = tStart;
+    const ansT = t + 0.3;
+    coupler(ansT + .4);
+    const cm = [0xE0, 0xC1, 0x05, isV90 ? 0x94 : 0x90, 0x45, 0x8A];
+    const cmBits = '1111111111' + '0000001111' + frame(cm), cmDur = cmBits.length / 300;
+    const cmStart = ansT + 1.0, jmStart = cmStart + 2 * cmDur + 0.04;
+    add(ansam(jmStart - ansT, .42), ansT);
+    ev({t0: ansT, t1: jmStart, dir: 'rx', kind: 'tone', label: 'ANSam', freq: [2100]});
+    lg(ansT, 'rx', 'ANSam 2100 Hz · 15-Hz-AM · Phasenumkehr alle 450 ms → Echokompensatoren im Netz abschalten');
+    for (let k = 0; k < 3; k++){
+      const tt = cmStart + k * cmDur;
+      add(fsk(cmBits, 300, 980, 1180, .3), tt);
+      ev({t0: tt, t1: tt + cmDur, dir: 'tx', kind: 'fsk', label: 'V.8 CM · V.21 Kanal 1', bits: cmBits, rate: 300, df: -100});
+    }
+    lg(cmStart, 'tx', 'V.8 CM (Call Menu) · V.21-FSK Kanal 1: 980/1180 Hz, 300 Bd – „Ich kann ' + (isV90 ? 'V.90, V.34' : 'V.34') + ', V.32bis, LAPM“');
+    const cjStart = cmStart + 3 * cmDur, cjBits = frame([0, 0, 0]), cjEnd = cjStart + cjBits.length / 300;
+    const reps = Math.ceil((cjEnd - jmStart) / cmDur) + 1;
+    const jmAll = fsk(cmBits.repeat(reps), 300, 1650, 1850, .3);
+    add(S.fade(jmAll.slice(0, Math.round((cjEnd + 0.02 - jmStart) * sr)), 3), jmStart);
+    ev({t0: jmStart, t1: cjEnd, dir: 'rx', kind: 'fsk', label: 'V.8 JM · V.21 Kanal 2', bits: cmBits.repeat(reps), rate: 300, df: -100});
+    lg(jmStart, 'rx', 'V.8 JM (Joint Menu) · V.21-FSK Kanal 2: 1650/1850 Hz – gemeinsame Modi bestätigt');
+    add(fsk(cjBits, 300, 980, 1180, .3), cjStart);
+    ev({t0: cjStart, t1: cjEnd, dir: 'tx', kind: 'fsk', label: 'V.8 CJ', bits: cjBits, rate: 300, df: -100});
+    lg(cjStart, 'tx', 'V.8 CJ – drei Null-Oktette: JM verstanden, V.8 fertig');
+    ph(tStart, cjEnd, 'V.8', '#86c7a0');
+    t = cjEnd + 0.075;
+
+    const p2 = t;
+    const info0c = '1111' + '01110010' + randBits(33), info0a = '1111' + '01110010' + randBits(33);
+    const sc = dpskSyms(info0c), sa = dpskSyms(info0a);
+    add(modulate(sc, 600, 1200, .3, .5), t); add(modulate(sa, 600, 2400, .3, .5), t);
+    ev({t0: t, t1: t + 45/600, dir: 'tx', kind: 'qam', label: 'INFO0c · DPSK 600 bit/s, 1200 Hz', syms: sc, baud: 600, bits: info0c, rate: 600});
+    ev({t0: t, t1: t + 45/600, dir: 'rx', kind: 'qam', label: 'INFO0a · DPSK 600 bit/s, 2400 Hz', syms: sa, baud: 600, bits: info0a, rate: 600});
+    lg(t, 'sys', 'Phase 2 · INFO0c/INFO0a (DPSK, 600 bit/s): Symbolraten 2400–3429 Bd, Fähigkeiten');
+    t += 45/600 + 0.03;
+    add(toneRev(1200, .45, .28, [.22]), t); add(toneRev(2400, .45, .28, [.3]), t);
+    ev({t0: t, t1: t + .45, dir: 'tx', kind: 'tone', label: 'Tone B', freq: [1200]});
+    ev({t0: t, t1: t + .45, dir: 'rx', kind: 'tone', label: 'Tone A', freq: [2400]});
+    lg(t, 'sys', 'Tone B 1200 Hz ⇄ Tone A 2400 Hz mit Phasenumkehr → Round-Trip-Delay messen');
+    t += .45;
+    add(probe(.16, .5), t); add(probe(.55, .25), t + .16); add(toneRev(2400, .75, .22), t);
+    ev({t0: t, t1: t + .71, dir: 'tx', kind: 'probe', label: 'L1/L2 Line Probing'});
+    ev({t0: t, t1: t + .75, dir: 'rx', kind: 'tone', label: 'Tone A', freq: [2400]});
+    lg(t, 'tx', 'L1/L2 Line Probing: 21 Töne 150–3750 Hz (ohne 900/1200/1800/2400) – die Gegenstelle misst Frequenzgang & SNR');
+    t += .75;
+    add(probe(.16, .5), t); add(probe(.55, .25), t + .16); add(toneRev(1200, .75, .22), t);
+    ev({t0: t, t1: t + .71, dir: 'rx', kind: 'probe', label: 'L1/L2 Line Probing'});
+    ev({t0: t, t1: t + .75, dir: 'tx', kind: 'tone', label: 'Tone B', freq: [1200]});
+    lg(t, 'rx', 'L1/L2 der Gegenstelle – jetzt misst unser Modem die Leitung');
+    t += .78;
+    const i1c = randBits(109), i1a = randBits(70), s1c = dpskSyms(i1c), s1a = dpskSyms(i1a);
+    add(modulate(s1c, 600, 1200, .3, .5), t); add(modulate(s1a, 600, 2400, .3, .5), t + .03);
+    ev({t0: t, t1: t + 109/600, dir: 'tx', kind: 'qam', label: 'INFO1c · DPSK', syms: s1c, baud: 600, bits: i1c, rate: 600});
+    ev({t0: t + .03, t1: t + .03 + 70/600, dir: 'rx', kind: 'qam', label: 'INFO1a · DPSK', syms: s1a, baud: 600, bits: i1a, rate: 600});
+    const sym = isV90 ? 3200 : (rng() < .5 ? 3200 : 3429);
+    const fc = sym === 3429 ? 1959 : 1920;
+    hs.sym = sym; hs.fc = fc;
+    lg(t, 'sys', `INFO1c/INFO1a: Symbolrate ${sym} Bd, Träger ${fc} Hz, Pre-Emphasis, Sendepegel`);
+    t += 109/600 + .08;
+    ph(p2, t, 'Phase 2 · Probing', '#8fb0d8');
+
+    const p3 = t;
+    const train = N => cat(sSyms(Math.round(sym * .04), false), sSyms(16, true), ppSyms(288), qamSyms(N, 4));
+    const aT = train(Math.round(sym * .75)), aDur = aT.length / 2 / sym;
+    add(modulate(aT, sym, fc, .3), t);
+    ev({t0: t, t1: t + aDur, dir: 'rx', kind: 'qam', label: `S · S̄ · PP · TRN (QPSK, ${sym} Bd)`, syms: aT, baud: sym});
+    lg(t, 'rx', `Phase 3 · S/S̄ (Timing), PP (Probe-Folge), TRN: verwürfelte QPSK, ${sym} Bd – Entzerrer lernt`);
+    t += aDur + .03;
+    if (isV90){
+      const d = pcm(1.3, .32, 'dil');
+      add(d.a, t);
+      ev({t0: t, t1: t + 1.3, dir: 'rx', kind: 'pcm', label: 'DIL · PCM-Pegelfolgen', syms: d.levels, baud: 8000});
+      lg(t, 'rx', 'V.90 DIL (Digital Impairment Learning): PCM-Pegel testen – µ/A-Law-Kennlinie, Robbed-Bit-Signaling, digitale Pads');
+      t += 1.35;
+    }
+    const cT = train(Math.round(sym * .65)), cDur = cT.length / 2 / sym;
+    add(modulate(cT, sym, fc, .3), t);
+    ev({t0: t, t1: t + cDur, dir: 'tx', kind: 'qam', label: `S · S̄ · PP · TRN (QPSK, ${sym} Bd)`, syms: cT, baud: sym});
+    lg(t, 'tx', 'Unser Training – Echokompensator & Entzerrer der Gegenstelle konvergieren');
+    t += cDur + .03;
+    ph(p3, t, 'Phase 3 · Training', '#c49ad6');
+
+    const p4 = t;
+    const tx4 = cat(qamSyms(Math.round(sym * .15), 4), qamSyms(Math.round(sym * .4), 16));
+    add(modulate(tx4, sym, fc, .3), t);
+    ev({t0: t, t1: t + tx4.length / 2 / sym, dir: 'tx', kind: 'qam', label: 'TRN · MP (16 Punkte)', syms: tx4, baud: sym});
+    if (isV90){
+      const d = pcm(.55, .3, 'data'); add(d.a, t);
+      ev({t0: t, t1: t + .55, dir: 'rx', kind: 'pcm', label: 'Ri · CPd (PCM)', syms: d.levels, baud: 8000});
+    } else {
+      const rx4 = cat(qamSyms(Math.round(sym * .15), 4), qamSyms(Math.round(sym * .4), 16));
+      add(modulate(rx4, sym, fc, .3), t);
+      ev({t0: t, t1: t + rx4.length / 2 / sym, dir: 'rx', kind: 'qam', label: 'TRN · MP (16 Punkte)', syms: rx4, baud: sym});
+    }
+    lg(t, 'sys', 'Phase 4 · MP-Sequenzen: Datenrate, Trellis-Code, Precoder-Koeffizienten · E → Nutzdaten');
+    t += .58;
+    ph(p4, t, 'Phase 4', '#e2c07a');
+
+    const rates = isV90 ? [44000, 45333, 46666, 48000, 49333, 50666, 52000] : (sym === 3429 ? [31200, 33600] : [28800, 31200]);
+    const rate = rates[Math.floor(Math.pow(rng(), .7) * rates.length)];
+    hs.rate = rate; hs.connectT = t;
+    hs.lines = [`CARRIER ${rate}`, 'PROTOCOL: LAP-M', 'COMPRESSION: V.42BIS', `CONNECT ${rate}/ARQ/${isV90 ? 'V90' : 'V34'}`];
+    if (o.m2){
+      const dd = 5, up = qamSyms(Math.round(sym * dd), 64);
+      add(modulate(up, sym, fc, .28), t);
+      ev({t0: t, t1: t + dd, dir: 'tx', kind: 'qam', label: `Daten · 64-QAM, ${sym} Bd`, syms: up, baud: sym});
+      if (isV90){ const d = pcm(dd, .3, 'data'); add(d.a, t); ev({t0: t, t1: t + dd, dir: 'rx', kind: 'pcm', label: 'Daten · PCM 8 kHz', syms: d.levels, baud: 8000}); }
+      else { const dn = qamSyms(Math.round(sym * dd), 256); add(modulate(dn, sym, fc, .28), t); ev({t0: t, t1: t + dd, dir: 'rx', kind: 'qam', label: `Daten · 256-QAM, ${sym} Bd`, syms: dn, baud: sym}); }
+      ph(t, t + dd, 'Daten', '#9aa08a');
+      hs.end = t + dd;
+    } else hs.end = t + .12;
+  }
+
+  function v32(tStart){
+    let t = tStart + .3;
+    coupler(t + .4);
+    add(ansam(2.6, .42, false, true), t);
+    ev({t0: t, t1: t + 2.6, dir: 'rx', kind: 'tone', label: 'ANS 2100 Hz', freq: [2100]});
+    lg(t, 'rx', 'ANS 2100 Hz mit Phasenumkehr alle 450 ms (V.25) – Echokompensatoren aus');
+    ph(tStart, t + 2.6, 'V.25 ANS', '#86c7a0');
+    t += 2.6 + .075;
+    const B = 2400, fc = 1800, A = Math.SQRT1_2;
+    const alt = (N, inv) => { const s = new Float32Array(2 * N); for (let k = 0; k < N; k++){ const v = ((k & 1) ? -A : A) * (inv ? -1 : 1); s[2*k] = v; s[2*k+1] = v; } return s; };
+    const cons = (N, v) => { const s = new Float32Array(2 * N); for (let k = 0; k < N; k++){ s[2*k] = v * A; s[2*k+1] = v * A; } return s; };
+    const r0 = t;
+    const aSeq = cat(alt(Math.round(B * .35), false), alt(Math.round(B * .1), true), alt(Math.round(B * .1), false));
+    add(modulate(aSeq, B, fc, .3), t);
+    ev({t0: t, t1: t + aSeq.length / 2 / B, dir: 'rx', kind: 'qam', label: 'AC / CA · 600 + 3000 Hz', syms: aSeq, baud: B});
+    lg(t, 'rx', 'AC: Punkte A/C im Wechsel bei 2400 Bd um 1800 Hz → zwei Töne 600 + 3000 Hz');
+    const cSeq = cat(cons(Math.round(B * .3), 1), cons(Math.round(B * .15), -1));
+    add(modulate(cSeq, B, fc, .3), t + .2);
+    ev({t0: t + .2, t1: t + .2 + cSeq.length / 2 / B, dir: 'tx', kind: 'qam', label: 'AA / CC · 1800 Hz', syms: cSeq, baud: B});
+    lg(t + .2, 'tx', 'AA: immer Punkt A → reiner 1800-Hz-Träger');
+    lg(t + .35, 'rx', 'CA: Phasenumkehr der Gegenstelle …');
+    lg(t + .5, 'tx', '… CC als Antwort – Round-Trip-Delay für den Echokompensator gemessen');
+    t += .65 + .1;
+    ph(r0, t, 'V.32 Ranging', '#8fb0d8');
+    const p3 = t;
+    const aT = cat(sSyms(256, false), sSyms(16, true), qamSyms(Math.round(B * 1.1), 4), qamSyms(Math.round(B * .07), 4));
+    add(modulate(aT, B, fc, .3), t);
+    ev({t0: t, t1: t + aT.length / 2 / B, dir: 'rx', kind: 'qam', label: 'S · S̄ · TRN · R1 (2400 Bd)', syms: aT, baud: B});
+    lg(t, 'rx', 'S/S̄ + TRN (verwürfelte QPSK, 2400 Bd): Echokompensator & Entzerrer trainieren · R1: Ratensignal');
+    t += aT.length / 2 / B + .06;
+    const cT = cat(sSyms(256, false), sSyms(16, true), qamSyms(Math.round(B * 1.0), 4), qamSyms(Math.round(B * .07), 4));
+    add(modulate(cT, B, fc, .3), t);
+    ev({t0: t, t1: t + cT.length / 2 / B, dir: 'tx', kind: 'qam', label: 'S · S̄ · TRN · R2 (2400 Bd)', syms: cT, baud: B});
+    lg(t, 'tx', 'Unser S/S̄ + TRN · R2: „14400 möglich“');
+    t += cT.length / 2 / B + .06;
+    const f1 = qamSyms(Math.round(B * .35), 144), f2 = qamSyms(Math.round(B * .35), 144);
+    add(modulate(f1, B, fc, .26), t); add(modulate(f2, B, fc, .26), t);
+    ev({t0: t, t1: t + .35, dir: 'tx', kind: 'qam', label: 'E · B1 (TCM)', syms: f1, baud: B});
+    ev({t0: t, t1: t + .35, dir: 'rx', kind: 'qam', label: 'R3 · E · B1 (TCM)', syms: f2, baud: B});
+    lg(t, 'sys', 'R3 → E → B1: beide senden gleichzeitig im selben Band – nur der Echokompensator hält die Richtungen auseinander');
+    t += .35;
+    ph(p3, t, 'Training', '#c49ad6');
+    const rate = rng() < .75 ? 14400 : 12000;
+    hs.rate = rate; hs.connectT = t;
+    hs.lines = [`CARRIER ${rate}`, 'PROTOCOL: LAP-M', 'COMPRESSION: V.42BIS', `CONNECT ${rate}/ARQ/V32BIS`];
+    if (o.m2){
+      const dd = 5, up = qamSyms(B * dd, 144), dn = qamSyms(B * dd, 144);
+      add(modulate(up, B, fc, .26), t); add(modulate(dn, B, fc, .26), t);
+      ev({t0: t, t1: t + dd, dir: 'tx', kind: 'qam', label: 'Daten · 128 Punkte', syms: up, baud: B});
+      ev({t0: t, t1: t + dd, dir: 'rx', kind: 'qam', label: 'Daten · 128 Punkte', syms: dn, baud: B});
+      ph(t, t + dd, 'Daten', '#9aa08a');
+      hs.end = t + dd;
+    } else hs.end = t + .12;
+  }
+
+  function v22(tStart){
+    let t = tStart + 1.4;
+    coupler(t - .6);
+    add(ansam(3.3, .42, false, false), t);
+    ev({t0: t, t1: t + 3.3, dir: 'rx', kind: 'tone', label: 'ANS 2100 Hz', freq: [2100]});
+    lg(t, 'rx', 'ANS 2100 Hz (V.25), 3,3 s – Echosperren im Netz abschalten');
+    t += 3.3 + .075;
+    ph(tStart, t, 'V.25 ANS', '#86c7a0');
+    const u0 = t, baud = 600;
+    const tS1c = u0 + .611, tAq = u0 + 1.55, qN = Math.round(.25 * baud);
+    const sa = {p: 0}, nUsb = Math.round(.765 * baud), nS1 = 60;
+    const nSbA = Math.round((tAq - (u0 + (nUsb + nS1) / baud)) * baud);
+    const dib = n => Array.from({length: n}, () => ['00','01','10','11'][Math.floor(rng() * 4)]);
+    const s1 = () => Array.from({length: nS1}, (_, k) => k & 1 ? '11' : '00');
+    const aSy = cat(v22Syms(Array(nUsb).fill('11'), sa), v22Syms(s1(), sa), v22Syms(dib(nSbA), sa), qamSyms(qN, 16));
+    const aDur = aSy.length / 2 / baud;
+    add(modulate(aSy, baud, 2400, .3, .75), u0);
+    ev({t0: u0, t1: u0 + nUsb / baud, dir: 'rx', kind: 'qam', label: 'USB1 · Dibit 11, 600 Bd', syms: aSy, baud});
+    ev({t0: u0 + nUsb / baud, t1: u0 + aDur, dir: 'rx', kind: 'qam', label: 'S1 · SB1 · 16-QAM', syms: aSy, baud, off: nUsb});
+    if (de){ add(tone([1800], o.m2 ? aDur + 5 : aDur, .12), u0); lg(u0, 'rx', 'Schutzton 1800 Hz (CEPT) im Antwortkanal'); }
+    lg(u0, 'rx', 'USB1: unverwürfelte binäre 1 (Dibit 11 → +270°/Symbol) · Träger 2400 Hz · 600 Bd');
+    lg(u0 + nUsb / baud, 'rx', 'Gegenstelle: S1 und verwürfelte Einsen SB1');
+    const sc = {p: 0}, nSbC = Math.round((tAq - tS1c) * baud) - nS1;
+    const cSy = cat(v22Syms(s1(), sc), v22Syms(dib(nSbC), sc), qamSyms(qN, 16));
+    add(modulate(cSy, baud, 1200, .3, .75), tS1c);
+    ev({t0: tS1c, t1: tS1c + cSy.length / 2 / baud, dir: 'tx', kind: 'qam', label: 'S1 · SB1 · 16-QAM', syms: cSy, baud});
+    lg(tS1c, 'tx', 'S1: Dibits 00/11 im Wechsel (100 ms) → „ich kann 2400 bit/s“ · Träger 1200 Hz');
+    lg(tS1c + .1, 'tx', 'SB1: verwürfelte Einsen, Scrambler 1 + x⁻¹⁴ + x⁻¹⁷');
+    lg(tAq, 'sys', 'Umschalten auf 16-QAM: 4 bit/Symbol × 600 Bd = 2400 bit/s');
+    t = tAq + qN / baud;
+    ph(u0, t, 'V.22bis Training', '#c49ad6');
+    hs.rate = 2400; hs.connectT = t;
+    hs.lines = ['CARRIER 2400', 'PROTOCOL: LAP-M', 'COMPRESSION: V.42BIS', 'CONNECT 2400/ARQ'];
+    if (o.m2){
+      const dd = 5, up = qamSyms(dd * baud, 16), dn = qamSyms(dd * baud, 16);
+      add(modulate(up, baud, 1200, .3, .75), t); add(modulate(dn, baud, 2400, .3, .75), t);
+      ev({t0: t, t1: t + dd, dir: 'tx', kind: 'qam', label: 'Daten · 16-QAM, 600 Bd', syms: up, baud});
+      ev({t0: t, t1: t + dd, dir: 'rx', kind: 'qam', label: 'Daten · 16-QAM, 600 Bd', syms: dn, baud});
+      ph(t, t + dd, 'Daten', '#9aa08a');
+      hs.end = t + dd;
+    } else hs.end = t + .12;
+  }
+
+  function fskModem(tStart, std){
+    const C = FSKCFG[std];
+    let t = tStart + .3, u0;
+    if (std === 'b103'){
+      u0 = t;
+      lg(t, 'rx', 'Antwortton 2225 Hz – das ist schon der Mark-Träger der Gegenstelle (Bell 103, Answer-Kanal)');
+      coupler(t + .7);
+    } else {
+      add(ansam(3.0, .42, false, false), t);
+      ev({t0: t, t1: t + 3, dir: 'rx', kind: 'tone', label: 'ANS 2100 Hz', freq: [2100]});
+      lg(t, 'rx', 'ANS 2100 Hz (V.25) – Echosperren im Netz abschalten');
+      coupler(t + .5);
+      ph(tStart, t + 3, 'V.25 ANS', '#86c7a0');
+      t += 3.075; u0 = t;
+      lg(u0, 'rx', std === 'v23' ? 'Hauptkanal-Mark 1300 Hz – die Gegenstelle sendet mit 1200 Bd (Space 2100 Hz)' : 'Mark 1650 Hz – V.21 Kanal 2 (Space 1850 Hz)');
+    }
+    const oT = u0 + (std === 'b103' ? 1.1 : .45), cT = oT + (std === 'b103' ? .9 : .6);
+    add(tone([C.rx[0]], cT - u0, .28), u0);
+    ev({t0: u0, t1: cT, dir: 'rx', kind: 'fsk', label: `Mark ${C.rx[0]} Hz`, bits: '1'.repeat(Math.ceil((cT - u0) * C.rx[2]) + 2), rate: C.rx[2], df: (C.rx[0] - C.rx[1]) / 2});
+    add(tone([C.tx[0]], cT - oT, .28), oT);
+    ev({t0: oT, t1: cT, dir: 'tx', kind: 'fsk', label: `Mark ${C.tx[0]} Hz`, bits: '1'.repeat(Math.ceil((cT - oT) * C.tx[2]) + 2), rate: C.tx[2], df: (C.tx[0] - C.tx[1]) / 2});
+    lg(oT, 'tx', std === 'b103' ? 'Originate-Träger 1270 Hz (Mark), Space 1070 Hz – 300 Bd FSK' :
+                 std === 'v23' ? 'Rückkanal-Mark 390 Hz – wir senden mit 75 Bd (Space 450 Hz)' : 'Mark 980 Hz – V.21 Kanal 1 (Space 1180 Hz)');
+    ph(u0, cT, 'Träger', '#c49ad6');
+    hs.connectT = cT; hs.end = cT; hs.rate = C.rate; hs.rateLabel = C.rateLabel; hs.lines = C.lines; hs.fsk = C;
+  }
+
+  function fax(tStart){
+    let t = tStart + .3;
+    add(ansam(3.0, .42, false, false), t);
+    ev({t0: t, t1: t + 3, dir: 'rx', kind: 'tone', label: 'CED 2100 Hz', freq: [2100]});
+    lg(t, 'rx', 'CED 2100 Hz – ein Faxgerät antwortet (T.30)');
+    ph(tStart, t + 3, 'CED', '#86c7a0');
+    t += 3.075;
+    const v21 = (bits, dir, label) => {
+      add(fsk(bits, 300, 1650, 1850, .3), t);
+      ev({t0: t, t1: t + bits.length / 300, dir, kind: 'fsk', label, bits, rate: 300, df: -100});
+      t += bits.length / 300 + .075;
+    };
+    const p1 = t;
+    lg(t, 'rx', 'V.21 Kanal 2, HDLC: Präambel aus 0x7E-Flags, dann CSI (Kennung) und DIS (Fähigkeiten)');
+    v21(hdlc([[0xFF,0x03,0x40,0x31,0x32,0x33],[0xFF,0x13,0x80,0x00,0xCE,0xF4]], 1.0), 'rx', 'HDLC · CSI · DIS');
+    lg(t, 'tx', 'TSI + DCS: „ich sende mit V.29, 9600 bit/s, Normalauflösung“');
+    v21(hdlc([[0xFF,0x03,0x43,0x34,0x35],[0xFF,0x13,0x83,0x00,0xC6]], 1.0), 'tx', 'HDLC · TSI · DCS');
+    ph(p1, t, 'T.30', '#8fb0d8');
+    const B = 2400, fc = 1700;
+    const trn = sec => cat(sSyms(128, false), qamSyms(384, 4), qamSyms(48, 4), qamSyms(Math.round(B * sec), 16));
+    const p2 = t, tc = trn(1.5);
+    add(modulate(tc, B, fc, .3), t);
+    ev({t0: t, t1: t + tc.length / 2 / B, dir: 'tx', kind: 'qam', label: 'V.29-Training · TCF', syms: tc, baud: B});
+    lg(t, 'tx', 'V.29-Training + TCF: 1,5 s verwürfelte Nullen @ 9600 bit/s (2400 Bd, 1700 Hz)');
+    t += tc.length / 2 / B + .075;
+    lg(t, 'rx', 'CFR – Training bestätigt, bitte senden');
+    v21(hdlc([[0xFF,0x13,0x84]], 1.0), 'rx', 'HDLC · CFR');
+    ph(p2, t, 'Training', '#c49ad6');
+    hs.connectT = t;
+    const p3 = t, pg = trn(3.2);
+    add(modulate(pg, B, fc, .3), t);
+    ev({t0: t, t1: t + pg.length / 2 / B, dir: 'tx', kind: 'qam', label: 'Seite 1 · V.29', syms: pg, baud: B});
+    lg(t, 'tx', 'Seite 1 · MH-codierte Bildzeilen · V.29 9600 bit/s');
+    t += pg.length / 2 / B + .075;
+    ph(p3, t, 'Seite', '#e2c07a');
+    const p4 = t;
+    lg(t, 'tx', 'EOP – das war die letzte Seite'); v21(hdlc([[0xFF,0x13,0x2F]], 1.0), 'tx', 'HDLC · EOP');
+    lg(t, 'rx', 'MCF – Seite einwandfrei angekommen'); v21(hdlc([[0xFF,0x13,0x8C]], 1.0), 'rx', 'HDLC · MCF');
+    lg(t, 'tx', 'DCN – Verbindung trennen'); v21(hdlc([[0xFF,0x13,0xFB]], .4), 'tx', 'HDLC · DCN');
+    ph(p4, t, 'Abschluss', '#9aa08a');
+    hs.rate = 9600; hs.rateLabel = 'FAX'; hs.fax = true; hs.end = t; hs.linesT = t - .1;
+    hs.lines = ['FAX: 1 Seite übertragen (V.29, 9600 bit/s)'];
+  }
+
+  if (o.std === 'v22b') v22(t);
+  else if (o.std === 'v32b') v32(t);
+  else if (o.std === 'fax') fax(t);
+  else if (FSKCFG[o.std]) fskModem(t, o.std);
+  else v34(t, o.std === 'v90');
+
+  const lt = hs.linesT ?? hs.connectT;
+  hs.lines.forEach((l, i) => lg(lt + .05 + i * .06, i === hs.lines.length - 1 ? 'res' : 'sys', l));
+  const out = S.finish(hs.end, o.noise);
+  out.hs = hs;
+  return out;
+}
+
+/* ================= WARDIAL ATTEMPT ================= */
+const WD_LABEL = {noanswer: 'KEIN MODEM', busy: 'BESETZT', sit: 'KEIN ANSCHLUSS', voice: 'STIMME', carrier: 'CARRIER', cassandra: 'CARRIER', fax: 'FAX'};
+function buildAttempt(sr, o){
+  const S = makeSynth(sr, o.seed, 25);
+  const {add, ev, ph, tone, click} = S;
+  const de = o.region === 'de';
+  let t = dialPrefix(S, o, true) + .5;
+  const ringF = de ? [425] : [440, 480];
+  const ring = on => { add(tone(ringF, on, .3), t); ev({t0: t, t1: t + on, dir: 'rx', kind: 'tone', label: 'Freiton', freq: ringF}); t += on; };
+  const pickUp = () => { t += .7; add(click(.2), t); t += .3; };
+  const t0 = t; let name = 'Ruf', col = '#e0a66b';
+  switch (o.outcome){
+    case 'noanswer': ring(1.0); t += 1.2; ring(1.0); t += .4; name = 'kein Modem'; break;
+    case 'busy': {
+      const f = de ? [425] : [480, 620], on = de ? .48 : .5;
+      for (let k = 0; k < 4; k++){ add(tone(f, on, .3), t); ev({t0: t, t1: t + on, dir: 'rx', kind: 'tone', label: 'Besetztton', freq: f}); t += on * 2; }
+      name = 'Besetzt'; col = '#d97a6a'; break;
+    }
+    case 'sit':
+      for (const [f, d] of [[913.8, .274], [1370.6, .274], [1776.7, .38]]){ add(tone([f], d, .3), t); ev({t0: t, t1: t + d, dir: 'rx', kind: 'tone', label: 'SIT', freq: [f]}); t += d; }
+      t += .6; name = 'Kein Anschluss'; col = '#b9a0c9'; break;
+    case 'voice':
+      ring(1.0); pickUp();
+      add(S.mumble(1.9, .4), t); ev({t0: t, t1: t + 1.9, dir: 'rx', kind: 'noise', label: 'Stimme'}); t += 2.0;
+      name = 'Stimme'; col = '#9ec0d0'; break;
+    case 'fax': {
+      ring(1.0); pickUp();
+      add(S.ansam(1.2, .4, false, false), t); ev({t0: t, t1: t + 1.2, dir: 'rx', kind: 'tone', label: 'CED 2100 Hz', freq: [2100]}); t += 1.275;
+      const b = S.hdlc([], .7); add(S.fsk(b, 300, 1650, 1850, .3), t);
+      ev({t0: t, t1: t + b.length / 300, dir: 'rx', kind: 'fsk', label: 'HDLC-Flags', bits: b, rate: 300, df: -100}); t += b.length / 300;
+      name = 'Fax'; col = '#86c7a0'; break;
+    }
+    default:
+      ring(1.0); pickUp();
+      if (o.outcome === 'cassandra'){ add(tone([2225], 1.6, .3), t); ev({t0: t, t1: t + 1.6, dir: 'rx', kind: 'tone', label: 'Antwortton', freq: [2225]}); }
+      else { add(S.ansam(1.6, .4), t); ev({t0: t, t1: t + 1.6, dir: 'rx', kind: 'tone', label: 'ANSam', freq: [2100]}); }
+      t += 1.6; name = 'Carrier'; col = '#86c7a0';
+  }
+  ph(t0, t, name, col);
+  add(click(.3), t + .05); t += .2;
+  const out = S.finish(t, o.noise);
+  out.hs = {connectT: Infinity, lines: [], rate: 0};
+  return out;
+}
+
+/* ================= CP437 ================= */
+const CP437_HI = 'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0';
+const CP_ENC = new Map(); for (let i = 0; i < 128; i++) CP_ENC.set(CP437_HI[i], 128 + i);
+function enc437(s){ let o = ''; for (const ch of s){ const c = ch.charCodeAt(0); if (c < 128) o += ch; else { const b = CP_ENC.get(ch); o += String.fromCharCode(b === undefined ? 63 : b); } } return o; }
+const dec437 = code => code < 128 ? String.fromCharCode(code) : CP437_HI[code - 128];
+
+/* ================= ANSI HELPERS ================= */
+const CLS = '\x1b[2J\x1b[H', R0 = '\x1b[0m';
+const sg = (f, b = 0) => `\x1b[0;${f > 7 ? '1;' : ''}${30 + (f & 7)};${40 + (b & 7)}m`;
+const visLen = s => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').length;
+const padV = (s, w) => s + ' '.repeat(Math.max(0, w - visLen(s)));
+function plainText(s){
+  return s.replace(/\x1b\[2J/g, '\r\n').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/[═─]/g, '-').replace(/[║│]/g, '|').replace(/[╔╗╚╝┌┐└┘├┤┬┴┼╠╣╦╩╬]/g, '+')
+    .replace(/[█▓▀▄▌▐]/g, '#').replace(/[▒░]/g, ':');
+}
+function fmtDur(sec){
+  const s = Math.round(sec);
+  if (s < 60) return s + ' s';
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')} h` : `${m}:${String(x).padStart(2, '0')} min`;
+}
+const fmtNum = n => n.toLocaleString('de-DE');
+function bar(l, r){ const inner = ' ' + l + ' '.repeat(Math.max(1, 78 - l.length - r.length)) + r + ' '; return sg(0, 6) + inner.slice(0, 80) + R0 + '\r\n'; }
+
+/* ================= ANSI TERMINAL (80x25, CP437) ================= */
+const PAL = ['#000000','#AA0000','#00AA00','#AA5500','#0000AA','#AA00AA','#00AAAA','#AAAAAA',
+             '#555555','#FF5555','#55FF55','#FFFF55','#5555FF','#FF55FF','#55FFFF','#FFFFFF'];
+const BOXC = { // [up, down, left, right], 1 = single, 2 = double
+  '─':[0,0,1,1],'│':[1,1,0,0],'┌':[0,1,0,1],'┐':[0,1,1,0],'└':[1,0,0,1],'┘':[1,0,1,0],'├':[1,1,0,1],'┤':[1,1,1,0],'┬':[0,1,1,1],'┴':[1,0,1,1],'┼':[1,1,1,1],
+  '═':[0,0,2,2],'║':[2,2,0,0],'╔':[0,2,0,2],'╗':[0,2,2,0],'╚':[2,0,0,2],'╝':[2,0,2,0],'╠':[2,2,0,2],'╣':[2,2,2,0],'╦':[0,2,2,2],'╩':[2,0,2,2],'╬':[2,2,2,2]};
+class AnsiTerm {
+  constructor(canvas){ this.c = canvas; this.g = canvas.getContext('2d'); this.mono = false; this.lastBlink = -1; this.reset(); }
+  row(){ return Array.from({length: 80}, () => ({c: ' ', f: 7, b: 0})); }
+  reset(){
+    this.cells = Array.from({length: 25}, () => this.row());
+    this.x = 0; this.y = 0; this.fg = 7; this.bg = 0; this.bold = false; this.rev = false;
+    this.st = 0; this.par = ''; this.sx = 0; this.sy = 0; this.dirty = true; this.cursorOn = true;
+  }
+  clearAll(){ this.cells = Array.from({length: 25}, () => this.row()); this.x = this.y = 0; }
+  lf(){ this.y++; if (this.y > 24){ this.y = 24; this.cells.shift(); this.cells.push(this.row()); } }
+  put(ch){
+    if (this.x >= 80){ this.x = 0; this.lf(); }
+    let f = this.fg + (this.bold ? 8 : 0), b = this.bg;
+    if (this.rev){ const t = f & 7; f = b; b = t; }
+    const cell = this.cells[this.y][this.x]; cell.c = ch; cell.f = f; cell.b = b; this.x++;
+  }
+  writeByte(code){
+    this.dirty = true;
+    if (this.st === 1){ if (code === 91){ this.st = 2; this.par = ''; } else this.st = 0; return; }
+    if (this.st === 2){
+      const ch = String.fromCharCode(code);
+      if (/[0-9;?]/.test(ch)){ this.par += ch; if (this.par.length > 32) this.st = 0; return; }
+      this.csi(ch, this.par); this.st = 0; return;
+    }
+    switch (code){
+      case 27: this.st = 1; return;
+      case 13: this.x = 0; return;
+      case 10: this.lf(); return;
+      case 8: if (this.x > 0) this.x--; return;
+      case 9: this.x = Math.min(79, (this.x + 8) & ~7); return;
+      case 12: this.clearAll(); return;
+    }
+    if (code < 32 || code === 127) return;
+    this.put(dec437(code));
+  }
+  csi(f, p){
+    const a = p.replace(/\?/g, '').split(';').map(v => v === '' ? NaN : +v);
+    const n = (i, d) => isNaN(a[i]) ? d : a[i];
+    const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const blank = b => ({c: ' ', f: 7, b});
+    if (p.startsWith('?')){ if (p === '?25' && (f === 'h' || f === 'l')) this.cursorOn = f === 'h'; return; }
+    const row = this.cells[this.y], cnt = Math.max(1, n(0, 1));
+    switch (f){
+      case 'n': if (this.reply){ if (n(0, 0) === 6) this.reply(`\x1b[${this.y + 1};${Math.min(80, this.x + 1)}R`); else if (n(0, 0) === 5) this.reply('\x1b[0n'); } break;
+      case 'L': for (let k = 0; k < cnt; k++){ this.cells.splice(this.y, 0, this.row()); this.cells.length = 25; } break;
+      case 'M': this.cells.splice(this.y, cnt); while (this.cells.length < 25) this.cells.push(this.row()); break;
+      case 'P': row.splice(this.x, cnt); while (row.length < 80) row.push(blank(this.bg)); break;
+      case '@': for (let k = 0; k < cnt; k++) row.splice(this.x, 0, blank(this.bg)); row.length = 80; break;
+      case 'X': for (let x = this.x; x < Math.min(80, this.x + cnt); x++) row[x] = blank(this.bg); break;
+      case 'm':
+        for (const v0 of a){ const v = isNaN(v0) ? 0 : v0;
+          if (v === 0){ this.fg = 7; this.bg = 0; this.bold = false; this.rev = false; }
+          else if (v === 1) this.bold = true;
+          else if (v === 22) this.bold = false;
+          else if (v === 7) this.rev = true;
+          else if (v === 27) this.rev = false;
+          else if (v >= 30 && v <= 37) this.fg = v - 30;
+          else if (v === 39) this.fg = 7;
+          else if (v >= 40 && v <= 47) this.bg = v - 40;
+          else if (v === 49) this.bg = 0;
+          else if (v >= 90 && v <= 97){ this.fg = v - 90; this.bold = true; }
+        }
+        break;
+      case 'H': case 'f': this.y = cl(n(0, 1) - 1, 0, 24); this.x = cl(n(1, 1) - 1, 0, 79); break;
+      case 'J':
+        if (n(0, 0) === 2) this.clearAll();
+        else if (n(0, 0) === 1){ for (let y = 0; y < this.y; y++) this.cells[y] = this.row(); for (let x = 0; x <= Math.min(79, this.x); x++) this.cells[this.y][x] = blank(0); }
+        else { for (let x = this.x; x < 80; x++) this.cells[this.y][x] = blank(0); for (let y = this.y + 1; y < 25; y++) this.cells[y] = this.row(); }
+        break;
+      case 'K': { const m = n(0, 0), a0 = m === 0 ? this.x : 0, a1 = m === 1 ? this.x + 1 : 80; for (let x = a0; x < Math.min(80, a1); x++) this.cells[this.y][x] = blank(this.bg); break; }
+      case 'A': this.y = cl(this.y - n(0, 1), 0, 24); break;
+      case 'B': this.y = cl(this.y + n(0, 1), 0, 24); break;
+      case 'C': this.x = cl(this.x + n(0, 1), 0, 79); break;
+      case 'D': this.x = cl(this.x - n(0, 1), 0, 79); break;
+      case 's': this.sx = this.x; this.sy = this.y; break;
+      case 'u': this.x = this.sx; this.y = this.sy; break;
+    }
+  }
+  col(i, isBg){
+    if (!this.mono) return PAL[i];
+    if (isBg) return i ? '#0e3a1c' : '#000';
+    return i === 0 ? '#000' : (i >= 8 || i === 7) ? '#8dffab' : '#3dbd63';
+  }
+  box(g, a, x0, y0, cw, ch, lw){
+    const cx = x0 + cw / 2, cy = y0 + ch / 2, o = Math.max(lw * 1.2, cw * .16);
+    const H = (xa, xb, yy) => g.fillRect(Math.min(xa, xb), yy - lw / 2, Math.abs(xb - xa) + .5, lw);
+    const V = (ya, yb, xx) => g.fillRect(xx - lw / 2, Math.min(ya, yb), lw, Math.abs(yb - ya) + .5);
+    const [u, dn, l, r] = a, offs = t => t === 2 ? [-o, o] : [0];
+    for (const k of offs(l)) H(x0, cx + (l === 2 ? o : lw / 2), cy + k);
+    for (const k of offs(r)) H(cx - (r === 2 ? o : lw / 2), x0 + cw, cy + k);
+    for (const k of offs(u)) V(y0, cy + (u === 2 ? o : lw / 2), cx + k);
+    for (const k of offs(dn)) V(cy - (dn === 2 ? o : lw / 2), y0 + ch, cx + k);
+  }
+  draw(){
+    const c = this.c, d = Math.min(2, window.devicePixelRatio || 1);
+    const W = Math.round(c.clientWidth * d), H = Math.round(c.clientHeight * d);
+    if (!W || !H) return;
+    if (c.width !== W || c.height !== H){ c.width = W; c.height = H; this.dirty = true; }
+    const blink = Math.floor(performance.now() / 530) & 1;
+    if (!this.dirty && blink === this.lastBlink) return;
+    this.dirty = false; this.lastBlink = blink;
+    const g = this.g, cw = W / 80, chh = H / 25;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const fs = Math.max(6, Math.floor(chh * 0.82));
+    g.font = `${fs}px ui-monospace,"Cascadia Mono","DejaVu Sans Mono",Menlo,Consolas,monospace`;
+    const sx = Math.min(1, cw / g.measureText('M').width);
+    g.textBaseline = 'middle';
+    const lw = Math.max(1, Math.round(cw / 7));
+    for (let y = 0; y < 25; y++){
+      const row = this.cells[y], y0 = y * chh;
+      for (let x = 0; x < 80; x++){
+        const cell = row[x], x0 = x * cw;
+        if (cell.b){ g.fillStyle = this.col(cell.b, true); g.fillRect(x0, y0, cw + .6, chh + .6); }
+        const ch = cell.c;
+        if (ch === ' ' || ch === '\u00a0') continue;
+        g.fillStyle = this.col(cell.f, false);
+        if (ch === '█'){ g.fillRect(x0, y0, cw + .6, chh + .6); continue; }
+        if (ch === '▀'){ g.fillRect(x0, y0, cw + .6, chh / 2 + .6); continue; }
+        if (ch === '▄'){ g.fillRect(x0, y0 + chh / 2, cw + .6, chh / 2 + .6); continue; }
+        if (ch === '▌'){ g.fillRect(x0, y0, cw / 2 + .6, chh + .6); continue; }
+        if (ch === '▐'){ g.fillRect(x0 + cw / 2, y0, cw / 2 + .6, chh + .6); continue; }
+        if (ch === '░' || ch === '▒' || ch === '▓'){ g.globalAlpha = ch === '░' ? .28 : ch === '▒' ? .52 : .78; g.fillRect(x0, y0, cw + .6, chh + .6); g.globalAlpha = 1; continue; }
+        const bx = BOXC[ch];
+        if (bx){ this.box(g, bx, x0, y0, cw, chh, lw); continue; }
+        g.setTransform(sx, 0, 0, 1, x0, y0 + chh * .54);
+        g.fillText(ch, 0, 0);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+      }
+    }
+    if (blink && this.cursorOn){ g.fillStyle = this.mono ? '#8dffab' : '#aaaaaa'; g.fillRect(Math.min(79, this.x) * cw, (this.y + 1) * chh - chh * .16, cw, chh * .12); }
+  }
+}
+
+/* ================= ANSI ART ================= */
+const FONT = {
+  Z:['#####','   # ','  #  ',' #   ','#####'], E:['#####','#    ','#### ','#    ','#####'], I:['###',' # ',' # ',' # ','###'],
+  T:['#####','  #  ','  #  ','  #  ','  #  '], M:['#   #','## ##','# # #','#   #','#   #'], A:[' ### ','#   #','#####','#   #','#   #'],
+  S:[' ####','#    ',' ### ','    #','#### '], C:[' ####','#    ','#    ','#    ',' ####'], H:['#   #','#   #','#####','#   #','#   #'],
+  N:['#   #','##  #','# # #','#  ##','#   #']};
+function logoAnsi(word){
+  const rows = ['', '', '', '', ''];
+  for (const ch of word){ const gl = FONT[ch]; for (let r = 0; r < 5; r++) rows[r] += gl[r] + ' '; }
+  const w = rows[0].length, pad = Math.max(0, Math.floor((80 - w) / 2)), COL = [11, 11, 9, 13, 5];
+  let s = '';
+  for (let r = 0; r < 5; r++){
+    let line = ' '.repeat(pad), cur = -1;
+    for (let x = 0; x < w; x++){
+      const on = rows[r][x] === '#', sh = !on && r > 0 && x > 0 && rows[r - 1][x - 1] === '#';
+      const f = on ? COL[r] : sh ? 8 : -2;
+      if (f !== -2 && f !== cur){ line += sg(f); cur = f; }
+      line += on ? '█' : sh ? '░' : ' ';
+    }
+    s += line + R0 + '\r\n';
+  }
+  return s;
+}
+function encodeArt(g){
+  let s = '';
+  for (const row of g){
+    let end = 80; while (end > 0 && row[end - 1].c === ' ' && row[end - 1].b === 0) end--;
+    let cf = -1, cb = -1;
+    for (let x = 0; x < end; x++){
+      const c = row[x];
+      if (c.b !== cb || (c.c !== ' ' && c.f !== cf)){ s += sg(c.f, c.b); cf = c.f; cb = c.b; }
+      s += c.c;
+    }
+    s += R0 + '\r\n';
+  }
+  return s;
+}
+function sunsetAnsi(){
+  const g = Array.from({length: 21}, () => Array.from({length: 80}, () => ({c: ' ', f: 7, b: 0})));
+  const rnd = mulberry32(1983), HOR = 12;
+  const set = (x, y, c, f, b) => { if (x >= 0 && x < 80 && y >= 0 && y < 21){ const k = g[y][x]; k.c = c; k.f = f; if (b !== undefined) k.b = b; } };
+  const SKY = [[0,8,' '],[0,8,' '],[0,4,'░'],[0,4,'▒'],[4,5,'░'],[4,5,'▒'],[5,4,'▒'],[5,1,'░'],[5,1,'▒'],[1,5,'▒'],[1,3,'░'],[1,3,'▒']];
+  for (let y = 0; y < HOR; y++){ const [b, f, c] = SKY[y]; for (let x = 0; x < 80; x++) set(x, y, c, f, b); }
+  for (let i = 0; i < 28; i++){ const x = (rnd() * 80) | 0, y = (rnd() * 4) | 0; set(x, y, rnd() < .3 ? '*' : '·', rnd() < .4 ? 15 : 7); }
+  for (let y = 3; y < HOR; y++) for (let x = 20; x < 60; x++){
+    const dx = (x + .5 - 40) / 16, dy = (y + .5 - 11.6) / 8.2;
+    if (dx * dx + dy * dy > 1) continue;
+    if (y <= 6) set(x, y, '█', 11);
+    else if (y === 7) set(x, y, '▓', 11, 1);
+    else if (y === 8 || y === 10) set(x, y, '█', 9);
+    else set(x, y, '▀', y === 9 ? 9 : 13);
+  }
+  for (let x = 0; x < 80; x++){
+    const h = Math.max(0, 1.7 + 1.3 * Math.sin(x * .19 + 1) + .9 * Math.sin(x * .47) + (Math.abs(x - 40) > 17 ? 1 : -1.6));
+    const full = Math.floor(h);
+    for (let k = 0; k < full; k++) set(x, HOR - 1 - k, '█', 0);
+    if (h - full >= .5) set(x, HOR - 1 - full, '▄', 0);
+  }
+  for (let x = 0; x < 80; x++) set(x, HOR, '▀', 13, 0);
+  for (const y of [13, 15, 18]) for (let x = 0; x < 80; x++) set(x, y, '─', y < 15 ? 5 : 13, 0);
+  for (let y = HOR + 1; y < 21; y++){
+    const sp = 2.2 * (y - HOR + .5);
+    for (let k = -18; k <= 18; k++){
+      const x = Math.round(40 + k * sp);
+      if (x >= 0 && x < 80) set(x, y, k === 0 ? '│' : k < 0 ? '/' : '\\', y < 15 ? 5 : 13, 0);
+    }
+  }
+  return encodeArt(g);
+}
+const LOGO = logoAnsi('ZEITMASCHINE');
+const SUNSET = sunsetAnsi();
+
+/* ================= WIKI ================= */
+const WIKI = [
+ {k:'1', t:'Die Telefonleitung', l:[
+  '# Zwei Drähte und ein Stromkreis',
+  'Ein analoger Anschluss ist eine Zweidrahtleitung (a/b-Ader) zur',
+  'Vermittlungsstelle. Die legt rund 60 V Gleichspannung an. Hebst du ab,',
+  'schließt der Gabelumschalter die Schleife: Es fließen 20-60 mA, und die',
+  'Vermittlung weiß, dass jemand wählen will. Am Modem leuchtet dann "OH"',
+  '(off hook). Geklingelt wird mit Wechselspannung, in Deutschland 25 Hz.',
+  '',
+  '# Das Sprachband: 300 bis 3400 Hz',
+  'Das Netz ist für Sprache gebaut. Filter lassen nur etwa 300-3400 Hz',
+  'durch - alles, was ein Modem sendet, muss in dieses Fenster passen.',
+  '>  Pegel',
+  '>    |       _____________________________',
+  '>    |      /                             \\',
+  '>    |     /        nutzbares Band         \\',
+  '>    |____/                                 \\_______',
+  '>    +----+------+------+------+------+-----+------- Hz',
+  '>    0   300   1000   2000   3000  3400  4000',
+  'Im Spektrogramm oben siehst du es: über 3,4 kHz bleibt es dunkel.',
+  '',
+  '# Innen ist das Netz digital',
+  'Seit den 80ern tastet die Vermittlungsstelle dein Signal 8000-mal pro',
+  'Sekunde ab und speichert jeden Wert als 8-Bit-Zahl: PCM mit 64 kbit/s.',
+  'Europa nutzt die A-Law-, Nordamerika die µ-Law-Kennlinie: leise Pegel',
+  'werden fein, laute grob aufgelöst - ähnlich wie unser Gehör.',
+  'Das Runden auf 256 Stufen erzeugt Quantisierungsrauschen. Nach Shannon',
+  'begrenzen Bandbreite und Rauschen eine Strecke mit zwei solchen',
+  'Wandlungen auf gut 33 kbit/s. Genau dort endet V.34 (siehe Artikel 5).',
+  '',
+  '# Echo',
+  'Wo die Zweidrahtleitung auf die Vierdrahttechnik trifft (Gabelschal-',
+  'tung), wird ein Teil des Signals zurückgeworfen. Für Telefonate gab es',
+  'Echosperren, die immer nur eine Richtung durchlassen. Modems senden',
+  'aber gleichzeitig in beide Richtungen - deshalb schaltet der 2100-Hz-',
+  'Antwortton diese Sperren ab.']},
+ {k:'2', t:'Wählen: Scheibe und Töne', l:[
+  '# Impulswahl mit der Wählscheibe',
+  'Die Scheibe unterbricht beim Zurücklaufen kurz die Schleife: Die "3"',
+  'sind drei Unterbrechungen, die "0" sind zehn. Takt: 10 Impulse pro',
+  'Sekunde, je 60 ms offen und 40 ms geschlossen. Ein kleiner Fliehkraft-',
+  'regler in der Scheibe sorgt für das gleichmäßige Schnurren.',
+  'In der Vermittlung zählten früher Hebdrehwähler die Impulse mechanisch',
+  'mit - daher das Rattern im Hörer. Ein Modem macht es mit ATDP genauso,',
+  'nur öffnet und schließt es die Schleife per Relais.',
+  '',
+  '# Tonwahl (DTMF)',
+  'Jede Taste erzeugt zwei Töne gleichzeitig: einen aus ihrer Zeile und',
+  'einen aus ihrer Spalte (Dual Tone Multi Frequency).',
+  '>            1209 Hz  1336 Hz  1477 Hz  1633 Hz',
+  '>   697 Hz      1        2        3        A',
+  '>   770 Hz      4        5        6        B',
+  '>   852 Hz      7        8        9        C',
+  '>   941 Hz      *        0        #        D',
+  'Kein Ton ist ein Vielfaches eines anderen - so löst Sprache kaum ver-',
+  'sehentlich eine Ziffer aus. Die Spalte A-D gab es nur in Sonder-',
+  'geräten. Ein Ton dauert 40-100 ms: Tonwahl ist viel schneller.',
+  '',
+  '# Was man danach hört',
+  'Wählton: 425 Hz Dauerton (USA: 350 + 440 Hz).',
+  'Freiton: 425 Hz, 1 s an, 4 s aus - die Gegenseite klingelt.',
+  'Besetztton: 425 Hz, 480 ms an und aus.',
+  '"Kein Anschluss": der SIT-Dreiklang, aufsteigend um 950/1400/1800 Hz.',
+  'Ein Wardialer wertet genau diese Töne aus - probier es im Simulator.']},
+ {k:'3', t:'Modulation: aus Bits werden Töne', l:[
+  '# Baud ist nicht bit/s',
+  'Baud zählt Symbole pro Sekunde. Wie viele Bits ein Symbol trägt, hängt',
+  'davon ab, wie viele Zustände es gibt: 2 Zustände = 1 Bit, 4 = 2 Bit,',
+  '16 = 4 Bit. Beispiel V.22bis: 600 Baud x 4 Bit = 2400 bit/s.',
+  '"2400 Baud" war also meistens falsch - aber alle haben es gesagt.',
+  '',
+  '# FSK: Frequenzumtastung',
+  'Eine 1 (Mark) ist eine Frequenz, eine 0 (Space) eine andere.',
+  '>   Bell 103   Anrufer:      Mark 1270 Hz   Space 1070 Hz',
+  '>              Angerufener:  Mark 2225 Hz   Space 2025 Hz',
+  '>   V.21       Anrufer:      Mark  980 Hz   Space 1180 Hz',
+  '>              Angerufener:  Mark 1650 Hz   Space 1850 Hz',
+  'Jede Richtung hat ihr eigenes Band - Vollduplex ganz ohne Echo-',
+  'kompensation. Mehr als 1200 Baud passen so aber nicht ins Sprachband.',
+  'In der IQ-Anzeige ist FSK ein Zeiger, der je nach Bit links- oder',
+  'rechtsherum kreist.',
+  '',
+  '# PSK und QAM',
+  'Statt der Frequenz ändert man Phase und Amplitude eines Trägers.',
+  'Jedes Symbol ist ein Punkt in der IQ-Ebene:',
+  '>           Q                          Q',
+  '>           |                     o  o | o  o',
+  '>       o   |   o                 o  o | o  o',
+  '>    -------+------- I         --------+-------- I',
+  '>       o   |   o                 o  o | o  o',
+  '>           |                     o  o | o  o',
+  '>    QPSK: 4 Punkte = 2 Bit      16-QAM: 16 Punkte = 4 Bit',
+  'Mehr Punkte heißt mehr Bits pro Symbol - aber die Punkte rücken zu-',
+  'sammen, und Rauschen verwechselt sie leichter. Deshalb misst ein Modem',
+  'zuerst die Leitung und wählt dann Symbolrate und Punktezahl.',
+  '',
+  '# Pulsformung und Trellis',
+  'Harte Sprünge zwischen Symbolen würden das Spektrum verschmieren. Ein',
+  'Raised-Cosine-Filter rundet die Übergänge ab, ohne dass sich benach-',
+  'barte Symbole im Abtastzeitpunkt stören. Ab V.32 kommt Trellis-',
+  'Codierung dazu: Ein Zusatzbit macht nur bestimmte Punktfolgen gültig,',
+  'und der Viterbi-Decoder sucht die wahrscheinlichste. Das bringt rund',
+  '4 dB - als hätte man das Rauschen mehr als halbiert.']},
+ {k:'4', t:'Der Handshake Schritt für Schritt', l:[
+  'Das Kreischen dauert 10 bis 20 Sekunden. Jeder Laut hat einen Zweck,',
+  'und die Farben im Zeitstrahl des Simulators folgen genau diesen Phasen.',
+  '',
+  '# 1. ANSam: der hohe Pfeifton (2100 Hz)',
+  'Der Angerufene pfeift 2100 Hz: Echosperren im Netz schalten ab. Alle',
+  '450 ms springt die Phase um 180 Grad - dann gehen auch die Echokompen-',
+  'satoren des Netzes aus, denn die Modems haben eigene, bessere. Die',
+  'leichte 15-Hz-Amplitudenmodulation (das "am" in ANSam) bedeutet:',
+  'Ich beherrsche V.8.',
+  '',
+  '# 2. V.8: das Menü (das Zwitschern)',
+  'Mit 300 bit/s FSK schickt der Anrufer ein Call Menu (CM): Modulationen',
+  'und Protokolle, die er kann. Die Gegenseite antwortet mit dem Joint',
+  'Menu (JM), der Schnittmenge. CJ bestätigt.',
+  '',
+  '# 3. Phase 2: Leitung vermessen (bing-bong)',
+  'INFO0-Blöcke (600 bit/s DPSK) tauschen Fähigkeiten aus. Tone A und B',
+  'mit Phasenumkehr messen die Laufzeit hin und zurück. Dann L1/L2:',
+  '21 Sinustöne gleichzeitig im 150-Hz-Raster. Der Empfänger misst jeden',
+  'einzeln und kennt danach Frequenzgang und Rauschabstand der Leitung.',
+  'Daraus wählt er Symbolrate (2400-3429 Baud) und Trägerfrequenz.',
+  '',
+  '# 4. Phase 3: Training (das Rauschen)',
+  'Verwürfelte Daten nach bekanntem Muster. Die adaptiven Entzerrer',
+  'stellen sich ein, bis sie die Verzerrung der Leitung herausrechnen.',
+  'Bei V.90 folgt DIL, das "tschk-tschk": Der Server spielt Testpegel,',
+  'der Client lernt, welche PCM-Stufen sauber ankommen.',
+  '',
+  '# 5. Phase 4: festlegen',
+  'MP-Sequenzen legen Datenrate, Trellis-Code und Precoder fest. Dann',
+  'kommt B1, das Modem meldet CONNECT - und mit ATM1 wird es still.']},
+ {k:'5', t:'V.90: warum 56k selten 56k war', l:[
+  '# Der Trick',
+  'Ein Internetprovider hängt digital am Netz (ISDN-Primärmultiplex).',
+  'Sein Signal wird nie analog gewandelt - er schickt direkt die 8-Bit-',
+  'Werte, die sonst die Vermittlungsstelle erzeugen würde. Beim Kunden',
+  'werden sie nur einmal in Spannung umgesetzt: exakte Stufen, kein',
+  'Quantisierungsrauschen. 8000 Werte/s x 8 Bit = 64 kbit/s, theoretisch.',
+  '',
+  '# Warum dann nur 56k - und selten mal das?',
+  '>  - Auf der Strecke darf nur eine Analog-Wandlung liegen.',
+  '>  - Leise Stufen liegen zu dicht beieinander und fallen weg.',
+  '>  - In den USA stahl "Robbed-Bit-Signaling" manchmal das 8. Bit.',
+  '>  - Die US-Behörde FCC begrenzte die Leistung: max. 53,3 kbit/s.',
+  '>  - Die Kupferleitung rauscht: typisch waren 44-50 kbit/s.',
+  '',
+  '# Die Gegenrichtung',
+  'Der Upload ist klassisches V.34 mit höchstens 33,6 kbit/s, denn hier',
+  'findet die Wandlung wieder in der Vermittlung statt. Erst V.92 holte',
+  'mit PCM-Upstream bis zu 48 kbit/s heraus.',
+  '',
+  '# DIL: Digital Impairment Learning',
+  'Der Server spielt Folgen aller PCM-Stufen, der Client misst, welche',
+  'sich sicher unterscheiden lassen. Nur diese kommen ins "Alphabet".',
+  'Das ist das pulsierende Knistern kurz vor Ende des Handshakes.',
+  'Zwei V.90-Modems bei Privatleuten können so übrigens nicht mitein-',
+  'ander reden - eine Seite muss digital angeschlossen sein. Sonst fällt',
+  'die Verbindung auf V.34 zurück.']},
+ {k:'6', t:'Fehlerkorrektur und Kompression', l:[
+  '# Warum?',
+  'Ein Knacken auf der Leitung zerstört bei 28800 bit/s gleich Dutzende',
+  'Bits. Ohne Korrektur: Zeichensalat im Terminal.',
+  '',
+  '# MNP und V.42 (LAPM)',
+  'Das Modem packt die Daten in Rahmen mit Prüfsumme (CRC). Kommt ein',
+  'Rahmen beschädigt an, fordert die Gegenseite ihn neu an. Die Software',
+  'am PC merkt davon nichts außer einer kleinen Verzögerung. "ARQ" im',
+  'CONNECT steht für Automatic Repeat reQuest.',
+  '',
+  '# V.42bis: Kompression',
+  'Ein Wörterbuchverfahren, verwandt mit LZW: Häufige Zeichenfolgen',
+  'werden durch kurze Codes ersetzt. Text und ANSI-Grafik schrumpfen auf',
+  'die Hälfte bis ein Viertel. Gepackte Dateien (ZIP) werden nicht klei-',
+  'ner - der Chip erkennt das und überträgt sie dann unverändert.',
+  'Deshalb stellte man den COM-Port schneller ein als die Leitung, etwa',
+  'auf 115200: Das Modem konnte mehr annehmen, als es roh senden konnte.',
+  '(Im Simulator ist die Kompression nicht nachgebildet.)',
+  '',
+  '# In diesem Simulator',
+  'Bell 103, V.21 und V.23 laufen ohne Fehlerkorrektur. Mit Leitungs-',
+  'rauschen gehen bei Zmodem-Downloads Blöcke kaputt und werden neu',
+  'angefordert. Die schnellen Verbindungen haben LAPM - dort kommt bei',
+  'Zmodem gar kein Fehler mehr an.']},
+ {k:'7', t:'Hayes-Befehle, LEDs, Ergebniscodes', l:[
+  '# Befehlsmodus und Datenmodus',
+  'Das Modem hängt am seriellen Port. Im Befehlsmodus versteht es Befehle,',
+  'die mit AT ("attention") beginnen. Nach CONNECT geht alles durch.',
+  'Zurück kommt man mit +++ - aber nur mit einer Sekunde Ruhe davor und',
+  'danach (Guard Time). So bricht ein "+++" mitten im Text nichts ab.',
+  '',
+  '# Die wichtigsten Befehle',
+  '>  ATZ        Einstellungen laden    AT&F     Werkseinstellung',
+  '>  ATDT123    Tonwahl                ATDP123  Impulswahl',
+  '>  ATD..,..   Komma = 2 s Pause      ATH      auflegen',
+  '>  ATA        Anruf annehmen         ATO      zurück in die Verbindung',
+  '>  ATM0/1/2   Lautsprecher aus / bis CONNECT / immer',
+  '>  ATL0-3     Lautstärke             ATS0=2   nach 2x Klingeln abheben',
+  '>  ATI        Modem-Info             AT+MS=   Modulation festlegen',
+  '(ATA und ATS0 fehlen im Simulator - hier ruft nur man selbst an.)',
+  '',
+  '# Ergebniscodes',
+  'OK, ERROR, CONNECT, RING, BUSY, NO DIALTONE, NO ANSWER, NO CARRIER.',
+  '"NO CARRIER" heißt: Die Gegenstelle hat ihren Träger abgeschaltet.',
+  '',
+  '# Die Lämpchen',
+  '>  HS  High Speed      AA  Auto Answer     CD  Carrier Detect',
+  '>  OH  Off Hook        RD  Receive Data    SD  Send Data',
+  '>  TR  Terminal Ready  MR  Modem Ready',
+  'RD und SD flackern bei jedem Zeichen. Bei 300 Baud kann man förmlich',
+  'mitlesen.']},
+ {k:'8', t:'Dateiübertragung: X-, Y-, Zmodem', l:[
+  '# Xmodem (1977)',
+  '128-Byte-Blöcke mit einfacher Prüfsumme. Nach jedem Block wartet der',
+  'Sender auf ein ACK. Bei langen Laufzeiten verschenkt das viel Zeit.',
+  '',
+  '# Ymodem',
+  '1024-Byte-Blöcke, CRC-16, Dateiname und Größe werden mitgeschickt,',
+  'mehrere Dateien am Stück (Batch).',
+  '',
+  '# Zmodem (1986)',
+  'Der Sender schickt ohne Pause. Nur bei einem Fehler meldet sich der',
+  'Empfänger mit ZRPOS und der letzten guten Position - der Sender',
+  'springt zurück. Dazu CRC-32, Wiederaufnahme abgebrochener Downloads',
+  'und Auto-Start: Das Terminal erkennt "**", CAN und "B00" und öffnet',
+  'von selbst das Download-Fenster.',
+  '>    Sender                 Empfänger',
+  '>    ZRQINIT   -------->',
+  '>              <--------   ZRINIT',
+  '>    ZFILE     -------->',
+  '>              <--------   ZRPOS 0',
+  '>    ZDATA ... -------->',
+  '>    ZEOF      -------->',
+  '>              <--------   ZRINIT',
+  '>    ZFIN      -------->',
+  '>              <--------   ZFIN',
+  '>    "OO"      -------->',
+  '',
+  '# Faustregel',
+  'bit/s durch 10 = Zeichen pro Sekunde (8 Datenbits + Start + Stopp).',
+  'Rechenbeispiele stehen in Artikel 0.']},
+ {k:'9', t:'Fax: das T.30-Protokoll', l:[
+  '# Das Fax meldet sich',
+  'Der Anrufer piept alle 3 Sekunden mit 1100 Hz (CNG): "Ich bin ein',
+  'Fax." Das Zielgerät antwortet mit 2100 Hz (CED).',
+  '',
+  '# T.30: verhandeln mit 300 bit/s',
+  'Beide sprechen abwechselnd V.21 Kanal 2 (1650/1850 Hz) in HDLC-Rahmen:',
+  '>  DIS  Angerufener: was ich kann (V.17, V.29, Auflösung, ...)',
+  '>  CSI  seine Kennung - die Nummer im Display',
+  '>  DCS  Anrufer: so machen wir es',
+  '>  TCF  1,5 s Nullen im gewählten Tempo, als Test',
+  '>  CFR  "angekommen, los" - sonst FTT: langsamer versuchen',
+  'Jeder Rahmen beginnt mit Flags 0x7E (01111110). Damit dieses Muster',
+  'nie in den Daten vorkommt, wird nach fünf Einsen eine Null eingefügt:',
+  'Bit-Stuffing. Der Empfänger nimmt sie wieder heraus.',
+  '',
+  '# Die Seite',
+  'Eine A4-Zeile hat 1728 Bildpunkte. Sie wird lauflängencodiert',
+  '(Modified Huffman: "43 weiß, 5 schwarz, ...") und mit V.29',
+  '(9600 bit/s) oder V.17 (14400 bit/s) gesendet. Eine Textseite',
+  'dauert so etwa 15 bis 30 Sekunden.',
+  '',
+  '# Abschluss',
+  'EOP (letzte Seite), MCF (Seite in Ordnung), DCN (auflegen). Danach',
+  'druckt das Gerät seinen Sendebericht mit "OK".']},
+ {k:'0', t:'Bildaufbau und Geschwindigkeit', dyn: true},
+];
+function speedArticle(info){
+  const rows = [['300', 30], ['1200/75', 120], ['2400', 240], ['9600', 960], ['14400', 1440], ['28800', 2880], ['33600', 3360], ['50000', 5000]];
+  const l = [
+    '# Zeichen pro Sekunde',
+    'Ein Zeichen braucht auf der Leitung 10 Bit: Startbit, 8 Datenbits,',
+    'Stoppbit. Ein voller Textbildschirm hat 80 x 25 = 2000 Zeichen, mit',
+    'ANSI-Farbcodes schnell 4000 Bytes und mehr.',
+    '>   Verbindung   Zeichen/s   Bildschirm 4 KB    Datei 1 MB'];
+  for (const [n, c] of rows) l.push(`>   ${n.padEnd(12)}${String(c).padStart(9)}   ${fmtDur(4096 / c).padStart(15)}   ${fmtDur(1048576 / c).padStart(11)}`);
+  l.push(`Deine Verbindung: ${info.rateLabel} bit/s, also etwa ${info.cps} Zeichen pro Sekunde.`,
+    'Genau in diesem Tempo ist diese Seite gerade bei dir angekommen.',
+    '',
+    '# ANSI-Grafik',
+    'Escape-Sequenzen (ESC [ ...) setzen Farbe und Cursor. Statt Pixeln',
+    'schickt die Box Zeichen: Blockgrafik aus dem IBM-Zeichensatz',
+    '(Codepage 437) wie ░▒▓█▀▄ und Rahmen wie ╔═╗║╚╝.',
+    'Bei 2400 bit/s sah man jede Zeile entstehen. Viele Boxen hatten des-',
+    'halb kleine Logos für langsame und große für schnelle Anrufer - oder',
+    'fragten wie diese Box beim Login: "ANSI-Grafik verwenden?"',
+    '',
+    'Probier es aus: [B] Bildaufbau-Demo im Hauptmenü.');
+  return l;
+}
+
+/* ================= REMOTE HOSTS ================= */
+class LineIn {
+  constructor(max){ this.max = max; this.buf = ''; }
+  feed(ch, env){
+    if (ch === '\r'){ env.out('\r\n'); const l = this.buf; this.buf = ''; return l; }
+    if (ch === '\b' || ch === '\x7f'){ if (this.buf){ this.buf = this.buf.slice(0, -1); env.out('\b \b'); } return null; }
+    if (ch < ' ' || ch === '\x1b') return null;
+    if (this.buf.length < this.max){ this.buf += ch; env.out(ch); }
+    return null;
+  }
+}
+const TTT_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function tttWinner(b){ for (const [a, c, d] of TTT_LINES) if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a]; return b.every(x => x) ? 'D' : null; }
+function minimax(b, me, turn){
+  const w = tttWinner(b);
+  if (w === me) return {s: 1}; if (w === 'D') return {s: 0}; if (w) return {s: -1};
+  let best = null;
+  for (let i = 0; i < 9; i++) if (!b[i]){
+    b[i] = turn; const s = minimax(b, me, turn === 'X' ? 'O' : 'X').s; b[i] = '';
+    if (!best || (turn === me ? s > best.s : s < best.s)) best = {s, m: i};
+  }
+  return best;
+}
+
+const FILES = [
+  {name: 'MODEMFAQ.TXT', size: 18432,  d: 'Modem-FAQ, deutsch'},
+  {name: 'ANSIPACK.ZIP', size: 98304,  d: 'ANSI-Art-Sammlung'},
+  {name: 'TREIBER.ZIP',  size: 45056,  d: 'Maustreiber'},
+  {name: 'NODELIST.ZIP', size: 389120, d: 'FidoNet-Nodeliste'},
+  {name: 'LABYRINT.ZIP', size: 626688, d: 'Shareware-Dungeon'}];
+const DEMO_RATES = [300, 1200, 2400, 9600, 14400, 33600, 56000];
+
+const HOSTS = {
+  cassandra(){
+    const h = {upper: true, st: 'logon', fails: 0, b: null, li: new LineIn(40)};
+    const P = '\r\n> ';
+    const board = b => { const c = i => b[i] || String(i + 1);
+      return `\r\n ${c(0)} | ${c(1)} | ${c(2)}\r\n---+---+---\r\n ${c(3)} | ${c(4)} | ${c(5)}\r\n---+---+---\r\n ${c(6)} | ${c(7)} | ${c(8)}\r\n`; };
+    h.start = env => { env.mono(true); env.out('\r\n\r\nCASSANDRA STRATEGIC SIMULATION SYSTEM\r\nREV 4.1   AUTHORIZED PERSONNEL ONLY\r\n\r\nLOGON: '); };
+    h.key = (ch, env) => { const l = h.li.feed(ch, env); if (l !== null) h.line(l.trim().toUpperCase(), env); };
+    h.line = (s, env) => {
+      const out = t => env.out(t);
+      switch (h.st){
+        case 'logon':
+          if (s === 'TROJA'){ h.st = 'mood'; out('\r\nIDENTITY CONFIRMED.\r\n\r\nGOOD EVENING. IT HAS BEEN A LONG TIME.\r\nHOW ARE YOU FEELING TODAY?\r\n\r\n> '); return; }
+          h.fails++; out('ACCESS DENIED.\r\n');
+          if (h.fails === 3) out('HINT: THE PROPHETESS REMEMBERS HER CITY.\r\n');
+          if (h.fails >= 6){ out('SECURITY LOCKOUT. CONNECTION TERMINATED.\r\n'); env.hang(); return; }
+          out('\r\nLOGON: '); return;
+        case 'mood':
+          h.st = 'main'; out('NOTED. I HAVE BEEN RUNNING SIMULATIONS\r\nWHILE YOU WERE AWAY. TYPE LIST.\r\n' + P); return;
+        case 'main':
+          if (['LIST', 'LIST GAMES', 'GAMES'].includes(s)){ out('\r\n  CHESS\r\n  GO\r\n  BRIDGE\r\n  TICTACTOE\r\n  FLEET MANEUVERS\r\n  SUPPLY LOGISTICS\r\n  GLOBAL EXCHANGE\r\n' + P); return; }
+          if (s === 'HELP'){ out('COMMANDS: LIST, <SIMULATION NAME>, LOGOFF\r\n' + P); return; }
+          if (s === 'TICTACTOE' || s === 'TIC-TAC-TOE'){ h.b = Array(9).fill(''); h.st = 'ttt'; out('YOU ARE X. ENTER A FIELD NUMBER.\r\n' + board(h.b) + '\r\nYOUR MOVE: '); return; }
+          if (s === 'GLOBAL EXCHANGE'){ h.st = 'side'; out('WHICH SIDE?\r\n  1. BLUE\r\n  2. RED\r\n\r\nSIDE: '); return; }
+          if (['CHESS', 'GO', 'BRIDGE', 'FLEET MANEUVERS', 'SUPPLY LOGISTICS'].includes(s)){ out('MODULE OFFLINE. TAPE LIBRARY UNAVAILABLE.\r\n' + P); return; }
+          if (['LOGOFF', 'LOGOUT', 'BYE', 'QUIT', 'EXIT'].includes(s)){ out('GOODBYE.\r\n'); env.hang(); return; }
+          out(s ? 'UNKNOWN COMMAND. TYPE HELP.\r\n' + P : '> '); return;
+        case 'side': {
+          const side = (s === '1' || s === 'BLUE') ? 'BLUE' : (s === '2' || s === 'RED') ? 'RED' : null;
+          if (!side){ out('SIDE: '); return; }
+          h.st = 'main';
+          let r = `\r\nSIMULATION START. YOU COMMAND ${side}.\r\n\r\nT+00:00  SENSOR CONTACT, SECTOR 7\r\nT+00:03  ALERT LEVEL RAISED\r\nT+00:07  RESPONSE AUTHORIZED\r\nT+00:11  COUNTER-RESPONSE DETECTED\r\nT+00:19  FULL EXCHANGE\r\n\r\n`;
+          for (let k = 1; k <= 9; k++) r += `RUN ${String(k).padStart(3, '0')}  RESULT: NO SURVIVING SIDE\r\n`;
+          r += '\r\nCONCLUSION:\r\nSOME GAMES ARE LOST THE MOMENT THEY BEGIN.\r\nRECOMMENDATION: DO NOT BEGIN THEM.\r\n\r\nTICTACTOE IS STILL AVAILABLE.\r\n' + P;
+          out(r); return;
+        }
+        case 'ttt': {
+          const m = +s - 1;
+          if (!(m >= 0 && m < 9) || h.b[m]){ out('INVALID MOVE.\r\nYOUR MOVE: '); return; }
+          h.b[m] = 'X'; let w = tttWinner(h.b);
+          if (!w){ const mv = minimax(h.b, 'O', 'O').m; h.b[mv] = 'O'; out(`I TAKE ${mv + 1}.\r\n`); w = tttWinner(h.b); }
+          out(board(h.b));
+          if (w){ out(w === 'D' ? '\r\nDRAW.\r\n' : w === 'O' ? '\r\nI WIN.\r\n' : '\r\nYOU WIN. THAT SHOULD NOT HAVE HAPPENED.\r\n'); h.st = 'again'; out('\r\nANOTHER GAME? (Y/N): '); return; }
+          out('\r\nYOUR MOVE: '); return;
+        }
+        case 'again':
+          if (s.startsWith('Y')){ h.b = Array(9).fill(''); h.st = 'ttt'; out(board(h.b) + '\r\nYOUR MOVE: '); }
+          else { h.st = 'main'; out('> '); }
+          return;
+      }
+    };
+    return h;
+  },
+
+  bbs(){
+    const h = {upper: false, st: 'name', li: new LineIn(20), ansi: true, name: '', art: 0, pg: 0, caller: 1000 + Math.floor(Math.random() * 9000)};
+    const say = (env, s) => env.out(h.ansi ? s : plainText(s));
+    const key = (k, t) => `  ${sg(8)}[${sg(11)}${k}${sg(8)}]${sg(7)} ${t}`;
+    const cps = env => env.info.cps;
+
+    function mainMenu(env){
+      h.st = 'main';
+      const L = 12, IW = 54;
+      const bx = t => ' '.repeat(L) + sg(12) + '║' + R0 + padV(t, IW) + sg(12) + '║' + R0 + '\r\n';
+      let s = CLS + '\r\n';
+      s += h.ansi ? LOGO : '     Z E I T M A S C H I N E   B B S\r\n';
+      s += '\r\n' + sg(8) + ' '.repeat(18) + 'die Mailbox, die sich an 1994 erinnert' + R0 + '\r\n\r\n';
+      s += ' '.repeat(L) + sg(12) + '╔' + '═'.repeat(IW) + '╗' + R0 + '\r\n';
+      s += bx(key('W', 'Wissen: wie Modems funktionieren'));
+      s += bx(key('D', 'Dateien herunterladen (Zmodem)'));
+      s += bx(key('B', 'Bildaufbau-Demo und ANSI-Galerie'));
+      s += bx(key('N', 'Neuigkeiten'));
+      s += bx(key('Z', 'Zeit und Tarif'));
+      s += bx(key('G', 'Gute Nacht (auflegen)'));
+      s += ' '.repeat(L) + sg(12) + '╚' + '═'.repeat(IW) + '╝' + R0 + '\r\n\r\n';
+      s += `  ${sg(8)}Verbunden mit ${env.info.rateLabel} bit/s · etwa ${cps(env)} Zeichen/s · Anrufer Nr. ${h.caller}${R0}\r\n\r\n`;
+      s += `  ${sg(15)}Deine Wahl, ${h.name}: ${R0}`;
+      say(env, s);
+    }
+    function wikiList(env){
+      h.st = 'wiki';
+      let s = CLS + bar('WISSEN', 'Wie Modems funktionieren') + '\r\n';
+      for (const a of WIKI) s += `  ${sg(11)}${a.k}${sg(8)}  ${sg(7)}${a.t}${R0}\r\n`;
+      s += `\r\n  ${sg(8)}Jede Seite kommt mit deiner Leitungsgeschwindigkeit an: ${env.info.rateLabel} bit/s.${R0}\r\n`;
+      s += `\r\n  ${sg(8)}[Q] Hauptmenü${R0}\r\n\r\n  ${sg(15)}Welcher Artikel? ${R0}`;
+      say(env, s);
+    }
+    function pages(a, env){
+      const lines = a.dyn ? speedArticle(env.info) : a.l, per = 20;
+      const secs = []; let cur = [];
+      for (const ln of lines){ if (ln.startsWith('# ') && cur.length){ secs.push(cur); cur = []; } cur.push(ln); }
+      if (cur.length) secs.push(cur);
+      const trim = arr => { while (arr.length && arr[arr.length - 1] === '') arr.pop(); while (arr.length && arr[0] === '') arr.shift(); return arr; };
+      const out = []; let pg = [];
+      for (let sec of secs){
+        sec = trim(sec.slice());
+        if (pg.length && pg.length + 1 + sec.length > per){ out.push(pg); pg = []; }
+        if (pg.length) pg.push('');
+        while (sec.length > per - pg.length){ const room = per - pg.length; pg.push(...sec.slice(0, room)); sec = sec.slice(room); out.push(pg); pg = []; }
+        pg.push(...sec);
+      }
+      if (pg.length) out.push(pg);
+      return out;
+    }
+    function showPage(env){
+      const a = WIKI[h.art], pg = pages(a, env);
+      h.st = 'page'; h.npages = pg.length;
+      let s = CLS + bar(`WISSEN ${a.k}`, `Seite ${h.pg + 1}/${pg.length}`);
+      s += `${sg(15)}  ${a.t}${R0}\r\n\r\n`;
+      for (const ln of pg[h.pg]){
+        if (ln.startsWith('# ')) s += `  ${sg(11)}${ln.slice(2)}${R0}\r\n`;
+        else if (ln.startsWith('>')) s += `  ${sg(6)}${ln.slice(1)}${R0}\r\n`;
+        else s += `  ${sg(7)}${ln}${R0}\r\n`;
+      }
+      s += '\x1b[24;1H' + `  ${sg(8)}[Enter] weiter   [Z] zurück   [Q] Übersicht${R0}`;
+      say(env, s);
+    }
+    function files(env){
+      h.st = 'files';
+      const c = cps(env) * 0.97;
+      let s = CLS + bar('DATEIEN', 'Download per Zmodem') + '\r\n';
+      s += `  ${sg(15)}Nr  Datei           Bytes   Dauer*      Beschreibung${R0}\r\n`;
+      s += `  ${sg(8)}${'─'.repeat(64)}${R0}\r\n`;
+      FILES.forEach((f, i) => {
+        s += `  ${sg(11)} ${i + 1}${sg(7)}  ${f.name.padEnd(13)}${fmtNum(f.size).padStart(8)}   ${sg(14)}${fmtDur(f.size / c).padEnd(10)}${sg(7)}  ${f.d}${R0}\r\n`;
+      });
+      s += `\r\n  ${sg(8)}* bei ${env.info.rateLabel} bit/s, etwa ${cps(env)} Zeichen/s, ${env.info.arq ? 'mit Fehlerkorrektur (LAPM)' : 'ohne Fehlerkorrektur'}${R0}\r\n`;
+      s += `  ${sg(8)}  Im Download-Fenster gibt es einen Zeitraffer.${R0}\r\n`;
+      s += `\r\n  ${sg(8)}[1-5] herunterladen   [Q] Hauptmenü${R0}\r\n\r\n  ${sg(15)}Deine Wahl: ${R0}`;
+      say(env, s);
+    }
+    function demo(env, rate){
+      h.st = 'demo';
+      const note = rate ? `simuliert mit ${fmtNum(rate)} bit/s` : `mit deiner Verbindung, ${env.info.rateLabel} bit/s`;
+      let s = CLS + SUNSET;
+      s += `${sg(8)}  ${fmtNum(enc437(SUNSET).length)} Bytes ANSI, ${note}${R0}\r\n`;
+      s += `  ${DEMO_RATES.map((r, i) => `${sg(11)}${i + 1}${sg(7)} ${r}`).join('  ')}  ${sg(8)}Q zurück${R0}`;
+      if (rate) env.out(s, {cps: rate / 10}); else env.out(s);
+    }
+    function news(env){
+      h.st = 'wait';
+      let s = CLS + bar('NEUIGKEITEN', 'vom Sysop') + '\r\n';
+      s += `  ${sg(7)}- Neu im Dateibereich: LABYRINT.ZIP, ein Shareware-Dungeon.\r\n`;
+      s += '  - Die Box läuft jetzt mit einem 56k-Modem. Wer noch mit 2400 anruft:\r\n    Respekt - und schalte ANSI lieber aus.\r\n';
+      s += '  - Der Mondscheintarif gilt ab 21 Uhr. Bitte trotzdem nicht nach\r\n    23 Uhr anrufen, das Modem steht neben dem Bett.\r\n';
+      s += '  - Wer Diskette 4 von 7 hat: bitte zurückgeben.\r\n';
+      s += `  - Neu im Wissensbereich: zehn Artikel darüber, wie das alles funktioniert.${R0}\r\n`;
+      s += `\r\n  ${sg(8)}[Taste] zurück${R0}`;
+      say(env, s);
+    }
+    function time(env){
+      h.st = 'wait';
+      const d = new Date();
+      let s = CLS + bar('ZEIT UND TARIF', 'Knoten 1') + '\r\n';
+      s += `  ${sg(7)}Es ist ${d.toLocaleDateString('de-DE')}, ${d.toLocaleTimeString('de-DE')} Uhr.\r\n\r\n`;
+      s += '  Früher zählte jede Minute: Ein Ortsgespräch kostete Einheiten, und\r\n';
+      s += '  nachts war es billiger ("Mondscheintarif"). Viele Boxen begrenzten\r\n';
+      s += '  deshalb die Zeit pro Anruf - hier sind es großzügige 60 Minuten.\r\n\r\n';
+      s += `  Du bist seit ${fmtDur((performance.now() - h.t0) / 1000)} online.${R0}\r\n`;
+      s += `\r\n  ${sg(8)}[Taste] zurück${R0}`;
+      say(env, s);
+    }
+
+    h.start = env => { h.t0 = performance.now(); env.mono(false); env.out('\r\n\r\nZEITMASCHINE BBS - Knoten 1\r\n\r\nDein Name: '); };
+    h.key = (ch, env) => {
+      const k = ch.toUpperCase();
+      switch (h.st){
+        case 'name': {
+          const l = h.li.feed(ch, env); if (l === null) return;
+          h.name = l.trim() || 'Gast'; h.st = 'ansi';
+          env.out(`\r\nHallo ${h.name}!\r\nANSI-Grafik verwenden? [J/N] ${cps(env) < 60 ? `(bei ${env.info.rateLabel} bit/s lieber N) ` : ''}`);
+          return;
+        }
+        case 'ansi':
+          if (!'JNY'.includes(k) || !k) return;
+          h.ansi = k !== 'N'; env.out(k + '\r\n'); mainMenu(env); return;
+        case 'main':
+          env.flush();
+          if (k === 'W') wikiList(env);
+          else if (k === 'D') files(env);
+          else if (k === 'B') demo(env, 0);
+          else if (k === 'N') news(env);
+          else if (k === 'Z') time(env);
+          else if (k === 'G'){ h.st = 'bye'; env.out(`\r\n\r\n  Tschüss ${h.name}, bis zum nächsten Mondscheintarif!\r\n`); env.hang(); }
+          else if (ch === '\r') mainMenu(env);
+          return;
+        case 'wiki': {
+          const i = WIKI.findIndex(a => a.k === k);
+          if (i >= 0){ env.flush(); h.art = i; h.pg = 0; showPage(env); }
+          else if (k === 'Q' || ch === '\x1b'){ env.flush(); mainMenu(env); }
+          return;
+        }
+        case 'page':
+          if (ch === '\r' || ch === ' ' || k === 'W'){ env.flush(); if (h.pg + 1 < h.npages){ h.pg++; showPage(env); } else wikiList(env); }
+          else if (k === 'Z'){ env.flush(); if (h.pg > 0){ h.pg--; showPage(env); } else wikiList(env); }
+          else if (k === 'Q' || ch === '\x1b'){ env.flush(); wikiList(env); }
+          return;
+        case 'files': {
+          const i = +ch - 1;
+          if (i >= 0 && i < FILES.length){
+            const f = FILES[i]; h.st = 'busy';
+            env.out(`${ch}\r\n\r\n  ${sg(7)}Sende ${f.name} per Zmodem ...${R0}\r\nrz\r**\x18B00000000000000\r\n`);
+            env.download(f, ok => {
+              h.st = 'wait';
+              env.out(ok ? `\r\n  ${sg(10)}${f.name} ist angekommen: ${fmtNum(f.size)} Bytes.${R0}\r\n\r\n  ${sg(8)}[Taste] zurück${R0}`
+                         : `\r\n  ${sg(9)}Übertragung abgebrochen.${R0}\r\n\r\n  ${sg(8)}[Taste] zurück${R0}`);
+            });
+          } else if (k === 'Q' || ch === '\x1b'){ env.flush(); mainMenu(env); }
+          return;
+        }
+        case 'demo': {
+          const i = +ch - 1;
+          if (i >= 0 && i < DEMO_RATES.length){ env.flush(); demo(env, DEMO_RATES[i]); }
+          else if (k === 'Q' || ch === '\x1b'){ env.flush(); mainMenu(env); }
+          return;
+        }
+        case 'wait': env.flush(); mainMenu(env); return;
+      }
+    };
+    return h;
+  }
+};
+
+/* ================= LIVE FSK LINE ================= */
+class LiveLine {
+  constructor(cfg, t0, noise){
+    const sr = this.sr = ctx.sampleRate;
+    const mk = ([m, s, b]) => ({m, s, b, spb: sr / b, ph: 0, bb: 0, q: [], bits: null, bi: 0, sc: 0, b1: true, ch: null, hist: [], spans: []});
+    this.d = {tx: mk(cfg.tx), rx: mk(cfg.rx)};
+    this.t = Math.max(t0, ctx.currentTime + 0.02);
+    this.reveals = []; this.nodes = []; this.dead = false; this.noise = noise; this.rng = mulberry32(99);
+    this.timer = setInterval(() => this.pump(), 25);
+    this.pump();
+  }
+  send(dir, text){ for (const ch of text) this.d[dir].q.push(ch); }
+  busy(dir){ const D = this.d[dir]; return D.q.length > 0 || D.bits !== null || this.reveals.some(r => r.dir === dir); }
+  pump(){
+    if (this.dead) return;
+    const sr = this.sr;
+    while (this.t < ctx.currentTime + 0.2){
+      const n = Math.round(0.04 * sr), buf = ctx.createBuffer(1, n, sr), a = buf.getChannelData(0);
+      for (const dir of ['tx', 'rx']){
+        const D = this.d[dir], fc = (D.m + D.s) / 2;
+        for (let i = 0; i < n; i++){
+          if (D.sc <= 0){
+            if (D.bits === null && D.q.length){
+              const ch = D.q.shift(), c = ch.charCodeAt(0) & 0xFF;
+              let s = '0'; for (let k = 0; k < 8; k++) s += (c >> k) & 1;
+              D.bits = s + '1'; D.bi = 0; D.ch = ch;
+              const ts = this.t + i / sr; D.spans.push([ts, ts + 10 / D.b]); if (D.spans.length > 40) D.spans.shift();
+            }
+            D.b1 = D.bits ? D.bits[D.bi] === '1' : true;
+            D.sc += D.spb;
+            D.hist.push({t: this.t + i / sr, b: D.b1, th: D.bb}); if (D.hist.length > 900) D.hist.shift();
+          }
+          const f = D.b1 ? D.m : D.s;
+          D.ph += TAU * f / sr; D.bb += TAU * (f - fc) / sr;
+          a[i] += 0.28 * Math.sin(D.ph);
+          D.sc -= 1;
+          if (D.sc <= 0 && D.bits){ D.bi++; if (D.bi >= D.bits.length){ this.reveals.push({t: this.t + (i + 1) / sr, dir, ch: D.ch}); D.bits = null; D.ch = null; } }
+        }
+        D.ph %= TAU;
+      }
+      if (this.noise) for (let i = 0; i < n; i++) a[i] += (this.rng() * 2 - 1) * 0.012;
+      const s = ctx.createBufferSource(); s.buffer = buf; s.connect(hp); s.start(this.t);
+      this.nodes.push(s); s.onended = () => { const k = this.nodes.indexOf(s); if (k >= 0) this.nodes.splice(k, 1); };
+      this.t += n / sr;
+      this.reveals.sort((x, y) => x.t - y.t);
+    }
+  }
+  active(dir, now){ return this.d[dir].spans.some(([a, b]) => now >= a && now < b); }
+  theta(dir, tt){
+    const D = this.d[dir], H = D.hist; let i = H.length - 1;
+    while (i > 0 && H[i].t > tt) i--;
+    const h = H[i]; if (!h) return 0;
+    return h.th + TAU * ((h.b ? D.m : D.s) - (D.m + D.s) / 2) * (tt - h.t);
+  }
+  bitsUntil(dir, tt, n){
+    const H = this.d[dir].hist; let s = '';
+    for (let i = H.length - 1; i >= 0 && s.length < n; i--) if (H[i].t <= tt) s = (H[i].b ? '1' : '0') + s;
+    return s;
+  }
+  stop(){ this.dead = true; clearInterval(this.timer); for (const s of this.nodes){ try { s.stop(); } catch(e){} } this.nodes = []; }
+}
+
+/* ---------- continuous data carrier for fast modems (looped) ---------- */
+function buildLoop(sr, hs, std, de, noise){
+  const S = makeSynth(sr, 11, 4), dur = 3;
+  const q = (M, baud, fc, dir, label, al = .3) => {
+    const s = S.qamSyms(Math.round(baud * dur), M);
+    S.add(S.modulate(s, baud, fc, .26, al, 0), 0);
+    S.ev({t0: 0, t1: dur, dir, kind: 'qam', label, syms: s, baud});
+  };
+  if (std === 'v90'){
+    q(64, hs.sym, hs.fc, 'tx', `Daten · 64-QAM, ${hs.sym} Bd`);
+    const d = S.pcm(dur, .3, 'data', 0); S.add(d.a, 0);
+    S.ev({t0: 0, t1: dur, dir: 'rx', kind: 'pcm', label: 'Daten · PCM 8 kHz', syms: d.levels, baud: 8000});
+  } else if (std === 'v34'){
+    q(64, hs.sym, hs.fc, 'tx', `Daten · 64-QAM, ${hs.sym} Bd`); q(256, hs.sym, hs.fc, 'rx', `Daten · 256-QAM, ${hs.sym} Bd`);
+  } else if (std === 'v32b'){
+    q(144, 2400, 1800, 'tx', 'Daten · TCM, 2400 Bd'); q(144, 2400, 1800, 'rx', 'Daten · TCM, 2400 Bd');
+  } else {
+    q(16, 600, 1200, 'tx', 'Daten · 16-QAM, 600 Bd', .75); q(16, 600, 2400, 'rx', 'Daten · 16-QAM, 600 Bd', .75);
+    if (de) S.add(S.tone([1800], dur, .12, 0), 0);
+  }
+  return S.finish(dur, noise);
+}
+
+/* ================= AUDIO / STATE ================= */
+let ctx = null, hp, lp, cp1, cp2, cp3, gain, analyser, src = null;
+let state = 'idle'; // idle | handshake | online | wardial
+let session = null, online = null, wd = null, zm = null;
+let playing = false, startAt = 0, offset = 0, logIdx = 0;
+const settings = {speaker: 2, volume: 2};
+const VOL = [.12, .3, .6, 1];
+const known = new Map();
+let wdResults = [];
+const term = new AnsiTerm($('#crtC'));
+
+function ensureCtx(){
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  hp = ctx.createBiquadFilter(); hp.type = 'highpass';
+  lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+  cp1 = ctx.createBiquadFilter(); cp1.type = 'peaking';
+  cp2 = ctx.createBiquadFilter(); cp2.type = 'peaking';
+  cp3 = ctx.createBiquadFilter(); cp3.type = 'lowpass';
+  analyser = ctx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.15;
+  gain = ctx.createGain();
+  hp.connect(lp); lp.connect(cp1); cp1.connect(cp2); cp2.connect(cp3); cp3.connect(analyser); analyser.connect(gain); gain.connect(ctx.destination);
+  applyLine(); applyGain();
+}
+function applyLine(){
+  if (!ctx) return;
+  const on = $('#optLine').checked, cpl = $('#optCoupler').checked;
+  hp.frequency.value = cpl ? 380 : on ? 300 : 10; lp.frequency.value = on ? 3400 : 20000; hp.Q.value = lp.Q.value = 0.707;
+  cp1.frequency.value = 1150; cp1.Q.value = 1.6; cp1.gain.value = cpl ? 8 : 0;
+  cp2.frequency.value = 2350; cp2.Q.value = 2.2; cp2.gain.value = cpl ? 5 : 0;
+  cp3.frequency.value = cpl ? 2900 : 20000; cp3.Q.value = 0.9;
+}
+function applyGain(){
+  if (!gain) return;
+  const mute = settings.speaker === 0 || (settings.speaker === 1 && state === 'online');
+  gain.gain.setTargetAtTime(mute ? 0 : VOL[settings.volume], ctx.currentTime, 0.02);
+}
+function now(){ return playing ? ctx.currentTime - startAt + offset : offset; }
+function stopSrc(){ if (src){ try { src.onended = null; src.stop(); } catch(e){} src.disconnect(); src = null; } playing = false; }
+function startSrc(off){
+  const buf = ctx.createBuffer(1, session.samples.length, ctx.sampleRate);
+  buf.copyToChannel(session.samples, 0);
+  src = ctx.createBufferSource(); src.buffer = buf; src.connect(hp);
+  offset = off; startAt = ctx.currentTime; src.start(0, off); playing = true;
+}
+
+/* ---------- modem log ---------- */
+const logEl = $('#log');
+function line(cls, text, ts, syn){
+  const d = document.createElement('div');
+  if (syn) d.dataset.syn = '1';
+  if (ts != null){ const s = document.createElement('span'); s.className = 'ts'; s.textContent = `[${ts.toFixed(2).padStart(6, ' ')}] `; d.appendChild(s); }
+  const s = document.createElement('span'); s.className = cls; s.textContent = text; d.appendChild(s);
+  logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+}
+function flushLogs(t){
+  while (session && logIdx < session.logs.length && session.logs[logIdx].t <= t){
+    const l = session.logs[logIdx++]; line(l.cls, l.text, l.t, true);
+  }
+}
+function resetLogsTo(t){ logEl.querySelectorAll('[data-syn]').forEach(e => e.remove()); logIdx = 0; flushLogs(t); }
+
+const dataMode = () => state === 'online' && online && online.mode === 'data';
+function movePrompt(){
+  const row = $('#promptRow'), inp = $('#cmd'), hadFocus = document.activeElement === inp, dm = dataMode();
+  (dm ? $('#crt') : $('#termPanel')).appendChild(row);
+  $('#promptLbl').textContent = dm ? '⇄' : '>';
+  inp.placeholder = dm ? 'Einfach lostippen – alles geht an die Gegenstelle · +++ = Befehlsmodus' : '';
+  inp.setAttribute('autocapitalize', dm ? 'off' : 'characters');
+  if (dm) inp.value = '';
+  if (hadFocus) inp.focus({preventScroll: true});
+}
+
+/* ---------- call control ---------- */
+function hangup(silent){
+  stopSrc();
+  if (online){
+    if (online.live) online.live.stop();
+    if (online.loopSrc){ try { online.loopSrc.stop(); } catch(e){} }
+    if (online.host.close) online.host.close();
+  }
+  if (zm){ zm = null; $('#zm').hidden = true; }
+  const was = state !== 'idle';
+  if (wd){ wd = null; $('#wdBtn').textContent = 'Scan starten'; }
+  online = null; state = 'idle'; session = null; offset = 0;
+  renderTimeline(); setLcd('READY'); $('#phaseName').textContent = 'Leitung frei'; movePrompt(); applyGain();
+  $('#crtStat').textContent = 'getrennt';
+  if (!silent && was) line('sys', 'Aufgelegt – Schleife offen', null);
+}
+
+function dial(number, pulse){
+  ensureCtx(); if (ctx.state === 'suspended') ctx.resume();
+  hangup(true);
+  number = number.toUpperCase().replace(pulse ? /[^0-9,]/g : /[^0-9*#ABCD,]/g, '');
+  if (!number.replace(/,/g, '')){ line('err', 'NO DIALTONE – keine Nummer angegeben', null); return; }
+  const host = known.get(number) || 'bbs';
+  let std = $('#std').value;
+  if (host === 'cassandra' && std !== 'b103'){ std = 'b103'; $('#std').value = 'b103'; line('sys', 'Die Gegenstelle spricht nur Bell 103 – das Modem schaltet auf 300 Baud', null); }
+  if (host === 'fax' && std !== 'fax'){ std = 'fax'; $('#std').value = 'fax'; line('sys', 'Unter dieser Nummer antwortet ein Faxgerät', null); }
+  setLcd('BUILD');
+  $('#crt').hidden = true; term.reset();
+  const o = {std, region: $('#region').value, number, pulse, m2: false, coupler: $('#optCoupler').checked,
+             noise: $('#optNoise').checked, seed: (Math.random() * 1e9) | 0};
+  setTimeout(() => {
+    session = buildSession(ctx.sampleRate, o);
+    session.host = host; session.std = std; session.number = number;
+    state = 'handshake'; logIdx = 0;
+    renderTimeline(); startSrc(0); applyGain();
+  }, 20);
+}
+
+function makeEnv(){
+  return {
+    get info(){ return online ? online.info : {rateLabel: '?', cps: 1}; },
+    out(text, opts){
+      if (!online) return;
+      const b = enc437(text);
+      if (opts && opts.cps){ online.demoQ += b; online.demoCps = opts.cps; }
+      else if (online.live) online.live.send('rx', b);
+      else online.fastQ += b;
+    },
+    outRaw(bytes, opts){
+      if (!online) return;
+      if (opts && opts.cps){ online.demoQ += bytes; online.demoCps = opts.cps; }
+      else if (online.live) online.live.send('rx', bytes);
+      else online.fastQ += bytes;
+    },
+    flush(){ if (!online) return; if (online.live) online.live.d.rx.q.length = 0; online.fastQ = ''; online.demoQ = ''; },
+    hang(){ if (online) online.hangAfter = true; },
+    mono(on){ term.mono = on; term.dirty = true; },
+    download(file, done){ if (online) online.pendingZm = {file, done}; },
+  };
+}
+
+function goOnline(){
+  const hs = session.hs;
+  const endCtx = startAt + (session.dur - offset);
+  state = 'online';
+  const info = {rate: hs.rate, rateLabel: hs.rateLabel || String(hs.rate), cps: Math.round(hs.fsk ? hs.fsk.rx[2] / 10 : hs.rate / 10), arq: !hs.fsk, live: !!hs.fsk};
+  const useServer = session.host === 'bbs' && srv.ok && $('#peer').value === 'server';
+  online = {host: useServer ? makeRemoteHost(session.number) : HOSTS[session.host](), mode: 'data', live: null, info, fastQ: '', acc: 0, demoQ: '', demoCps: 1, dacc: 0,
+            hangAfter: false, pendingZm: null, plus: '', sdUntil: 0, loop: null, loopSrc: null, loopStart: 0};
+  online.env = makeEnv();
+  if (hs.fsk) online.live = new LiveLine(hs.fsk, endCtx, $('#optNoise').checked);
+  else {
+    const lr = buildLoop(ctx.sampleRate, hs, session.std, $('#region').value === 'de', $('#optNoise').checked);
+    const b = ctx.createBuffer(1, lr.samples.length, ctx.sampleRate); b.copyToChannel(lr.samples, 0);
+    const s = ctx.createBufferSource(); s.buffer = b; s.loop = true; s.connect(hp); s.start();
+    online.loop = lr; online.loopSrc = s; online.loopStart = ctx.currentTime;
+  }
+  term.reset(); term.mono = false;
+  $('#crt').hidden = false;
+  $('#crtTitle').textContent = `Terminal · ${info.rateLabel} bit/s · ${info.cps} Zeichen/s`;
+  $('#crtStat').textContent = (useServer ? 'Server-BBS · ' : '') + (info.arq ? 'LAPM' : 'ohne Fehlerkorrektur');
+  movePrompt();
+  if (document.activeElement && document.activeElement !== cmdEl) document.activeElement.blur();
+  if (matchMedia('(pointer: fine)').matches) cmdEl.focus({preventScroll: true});
+  setTimeout(() => {
+    if (state !== 'online') return;
+    if (settings.speaker === 1){ applyGain(); line('sys', '(Lautsprecher aus – ATM1)', null); }
+    online.host.start(online.env);
+    $('#crt').scrollIntoView({block: 'nearest', behavior: 'smooth'});
+  }, hs.fsk ? 700 : 250);
+}
+
+function sendKey(ch){
+  if (!dataMode() || zm) return;
+  online.plus = (online.plus + ch).slice(-3);
+  if (online.plus === '+++'){ online.plus = ''; online.mode = 'cmd'; movePrompt(); line('res', 'OK', null); return; }
+  if (online.host.upper) ch = ch.toUpperCase();
+  const b = enc437(ch);
+  online.sdUntil = ctx.currentTime + 0.08;
+  if (online.live) online.live.send('tx', b);
+  else setTimeout(() => deliverKey(b), 15);
+}
+function sendRaw(str){
+  if (!online) return;
+  const b = enc437(str);
+  if (online.live) online.live.send('tx', b);
+  else for (const c of b) setTimeout(() => deliverKey(c), 15);
+}
+term.reply = s => sendRaw(s);
+function deliverKey(b){ if (online) online.host.key(dec437(b.charCodeAt(0)), online.env); }
+function rxIdle(){ return !online.demoQ && (online.live ? !online.live.busy('rx') : !online.fastQ); }
+function carrierLost(){ hangup(true); line('res', 'NO CARRIER', null); }
+
+function processOnline(dt){
+  const L = online.live, n = ctx.currentTime;
+  if (L){
+    while (L.reveals.length && L.reveals[0].t <= n){
+      const r = L.reveals.shift();
+      if (r.dir === 'rx'){ if (!zm) term.writeByte(r.ch.charCodeAt(0)); }
+      else { deliverKey(r.ch); if (!online) return; }
+    }
+  } else if (online.fastQ){
+    online.acc += dt * online.info.cps;
+    const k = Math.floor(online.acc); online.acc -= k;
+    if (k > 0){ const s = online.fastQ.slice(0, k); online.fastQ = online.fastQ.slice(k); for (let i = 0; i < s.length; i++) term.writeByte(s.charCodeAt(i)); }
+  } else online.acc = 0;
+  if (online.demoQ){
+    online.dacc += dt * online.demoCps;
+    const k = Math.floor(online.dacc); online.dacc -= k;
+    if (k > 0){ const s = online.demoQ.slice(0, k); online.demoQ = online.demoQ.slice(k); for (let i = 0; i < s.length; i++) term.writeByte(s.charCodeAt(i)); }
+  } else online.dacc = 0;
+  if (online.pendingZm && rxIdle()) startZm();
+  if (zm) zmTick(dt);
+  if (online && online.hangAfter && rxIdle()) carrierLost();
+}
+
+/* ---------- Zmodem ---------- */
+let zmDraw = 0;
+function startZm(){
+  const {file, done} = online.pendingZm; online.pendingZm = null;
+  const noisy = $('#optNoise').checked;
+  zm = {file, done, pos: 0, blk: 0, errs: 0, speed: 1, cps: online.info.cps * 0.97, fin: 0,
+        pErr: online.info.arq || !noisy ? 0 : (online.info.cps <= 30 ? .015 : .03),
+        log: ['ZRQINIT  -->', '<--  ZRINIT', `ZFILE ${file.name} ${file.size}  -->`, '<--  ZRPOS 0', 'ZDATA ...  -->']};
+  $('#zm').hidden = false; setZmSpeedBtns(); renderZm(true);
+  line('sys', `Zmodem: Empfang von ${file.name} gestartet`, null);
+}
+function zmTick(dt){
+  if (zm.fin){ zm.fin -= dt; renderZm(); if (zm.fin <= 0) zmClose(true); return; }
+  zm.pos += zm.cps * zm.speed * Math.min(dt, .1);
+  const blk = Math.floor(zm.pos / 1024);
+  while (zm.blk < blk){
+    zm.blk++;
+    if (Math.random() < zm.pErr){ zm.errs++; const back = (zm.blk - 1) * 1024; zm.log.push(`CRC-Fehler Block ${zm.blk}  <--  ZRPOS ${back}`); zm.pos = back; zm.blk--; break; }
+  }
+  if (zm.pos >= zm.file.size){ zm.pos = zm.file.size; zm.log.push('ZEOF  -->', '<--  ZRINIT', 'ZFIN  -->', '<--  ZFIN', 'OO  -->'); zm.fin = 1.4; }
+  if (online.live){ const q = online.live.d.rx.q; while (q.length < 24) q.push(String.fromCharCode((Math.random() * 256) | 0)); }
+  renderZm();
+}
+function renderZm(force){
+  const t = performance.now(); if (!force && t - zmDraw < 90) return; zmDraw = t;
+  const z = zm, pct = Math.floor(z.pos / z.file.size * 100), rest = (z.file.size - z.pos) / (z.cps * z.speed);
+  $('#zmBody').innerHTML =
+    `<div class="zm-row"><span>Datei</span><b>${z.file.name}</b></div>` +
+    `<div class="zm-row"><span>Größe</span><b>${fmtNum(z.file.size)} Bytes</b></div>` +
+    `<div class="zm-row"><span>Übertragen</span><b>${fmtNum(Math.floor(z.pos))} Bytes · ${pct} %</b></div>` +
+    `<div class="zm-row"><span>Zeichen/s</span><b>${Math.round(z.cps * z.speed)}${z.speed > 1 ? ` (Zeitraffer ×${z.speed})` : ''}</b></div>` +
+    `<div class="zm-row"><span>Restzeit</span><b>${z.fin ? 'fertig' : fmtDur(rest)}</b></div>` +
+    `<div class="zm-row"><span>Fehler</span><b>${z.errs}${online && online.info.arq ? ' · LAPM korrigiert alles' : ''}</b></div>`;
+  $('#zmBar').style.width = pct + '%';
+  $('#zmLog').textContent = z.log.slice(-5).join('\n');
+}
+function setZmSpeedBtns(){ document.querySelectorAll('#zm button[data-s]').forEach(b => b.classList.toggle('on', zm && +b.dataset.s === zm.speed)); }
+function zmClose(ok){
+  const z = zm; zm = null; $('#zm').hidden = true;
+  if (online && online.live){ const L = online.live; L.d.rx.q.length = 0; L.d.rx.bits = null; L.d.rx.ch = null; L.reveals = L.reveals.filter(r => r.dir !== 'rx'); }
+  line(ok ? 'sys' : 'err', ok ? `Zmodem: ${z.file.name} komplett, ${z.errs} Fehler` : 'Zmodem: abgebrochen (5 × CAN)', null);
+  z.done(ok);
+}
+document.querySelectorAll('#zm button[data-s]').forEach(b => b.addEventListener('click', () => {
+  if (!zm) return;
+  const s = +b.dataset.s;
+  if (!s){ zm.log.push('CAN CAN CAN CAN CAN  -->'); zmClose(false); return; }
+  zm.speed = s; setZmSpeedBtns(); renderZm(true);
+}));
+
+/* ---------- server BBS (WebSocket, only when served by the self-hosted server) ---------- */
+const srv = {ok: false, info: null};
+function makeRemoteHost(number){
+  const h = {upper: false, ws: null, opened: false};
+  h.start = env => {
+    let ws;
+    try { ws = new WebSocket(new URL('ws', location.href).href.replace(/^http/, 'ws')); }
+    catch(e){ line('err', 'Server-BBS nicht erreichbar', null); env.hang(); return; }
+    ws.binaryType = 'arraybuffer'; h.ws = ws;
+    ws.onopen = () => { h.opened = true; const i = env.info; ws.send(JSON.stringify({type: 'hello', number, rate: i.rate, rateLabel: i.rateLabel, cps: i.cps, arq: i.arq})); };
+    ws.onmessage = ev => {
+      if (typeof ev.data === 'string'){
+        let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+        if (m.type === 'flush') env.flush();
+        else if (m.type === 'demo') env.outRaw(atob(m.b64), {cps: m.cps});
+        else if (m.type === 'zmodem') env.download(m.file, ok => { if (ws.readyState === 1) ws.send(JSON.stringify({type: 'zmodem-done', ok})); });
+        else if (m.type === 'hangup') env.hang();
+      } else {
+        const u8 = new Uint8Array(ev.data); let s = '';
+        for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+        env.outRaw(s);
+      }
+    };
+    ws.onclose = () => { if (!h.opened) line('err', 'Server-BBS nicht erreichbar', null); h.ws = null; env.hang(); };
+  };
+  h.key = ch => { if (h.ws && h.ws.readyState === 1) h.ws.send(new Uint8Array([enc437(ch).charCodeAt(0)])); };
+  h.close = () => { if (h.ws){ try { h.ws.close(); } catch(e){} h.ws = null; } };
+  return h;
+}
+async function probeServer(){
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch('api/info', {cache: 'no-store'});
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    if (!j || !j.zeitmaschine) throw 0;
+    srv.ok = true; srv.info = j;
+    $('#peerWrap').hidden = false; $('#srvInfo').hidden = false;
+    $('#srvInfo').textContent = `${j.name} läuft auf diesem Server · ${j.nodes.length} von ${j.max} Knoten belegt · Telnet: ${location.hostname} Port ${j.telnetPort}`;
+    const pb = $('#pbRes'); pb.innerHTML = '';
+    for (const e of (j.phonebook || [])){
+      const b = document.createElement('button'); b.className = 'r'; b.textContent = `${e.number} ${e.name}`; b.title = e.desc || '';
+      b.addEventListener('click', () => { $('#peer').value = 'server'; cmdEl.value = 'ATDT' + e.number; exec('ATDT' + e.number); });
+      pb.appendChild(b);
+    }
+    $('#pbWrap').hidden = !(j.phonebook || []).length;
+  } catch(e){ srv.ok = false; $('#peerWrap').hidden = true; $('#srvInfo').hidden = true; $('#pbWrap').hidden = true; }
+}
+probeServer(); setInterval(() => { if (srv.ok) probeServer(); }, 20000);
+
+/* ---------- AT commands ---------- */
+function exec(raw){
+  const s0 = raw.trim(); if (!s0) return;
+  line('cmd', s0, null);
+  const s = s0.toUpperCase().replace(/\s+/g, '');
+  if (!s.startsWith('AT')){ line('err', 'ERROR', null); return; }
+  let i = 2, ok = true;
+  while (i < s.length){
+    const c = s[i++];
+    const num = () => { let m = ''; while (i < s.length && /[0-9]/.test(s[i])) m += s[i++]; return m === '' ? 0 : +m; };
+    if (c === 'D'){
+      let pulse = false; if (s[i] === 'T') i++; else if (s[i] === 'P'){ pulse = true; i++; }
+      dial(s.slice(i), pulse); return;
+    } else if (c === 'H'){ num(); hangup(false); }
+    else if (c === 'O'){ num(); if (state === 'online'){ online.mode = 'data'; movePrompt(); line('res', 'CONNECT ' + online.info.rateLabel, null); return; } ok = false; break; }
+    else if (c === 'M'){ const v = num(); if (v > 3){ ok = false; break; } settings.speaker = Math.min(v, 2); $('#optM2').checked = v === 2; applyGain(); }
+    else if (c === 'L'){ const v = num(); if (v > 3){ ok = false; break; } settings.volume = v; applyGain(); }
+    else if (c === 'Z'){ num(); hangup(true); settings.speaker = 1; settings.volume = 2; $('#optM2').checked = false; applyGain(); }
+    else if (c === 'I'){ num(); line('res', 'SIM-56 · Bell 103, V.21, V.23, V.22bis, V.32bis, V.34, V.90, Fax G3 · V.8 · V.42bis', null); }
+    else if (c === '+'){
+      const m = s.slice(i).match(/^MS=(V90|V34|V32BIS|V32B|V22BIS|V22B|V23|V21|BELL103|B103)/);
+      if (!m){ ok = false; break; }
+      const map = {V90: 'v90', V34: 'v34', V32BIS: 'v32b', V32B: 'v32b', V22BIS: 'v22b', V22B: 'v22b', V23: 'v23', V21: 'v21', BELL103: 'b103', B103: 'b103'};
+      $('#std').value = map[m[1]]; i = s.length;
+    }
+    else if ('EQVX&S'.includes(c)){ if (c === '&') i++; if (c === 'S'){ while (i < s.length && /[0-9=?]/.test(s[i])) i++; } else num(); }
+    else { ok = false; break; }
+  }
+  line(ok ? 'res' : 'err', ok ? 'OK' : 'ERROR', null);
+}
+
+const cmdEl = $('#cmd');
+cmdEl.addEventListener('keydown', e => {
+  if (dataMode()){
+    if (e.key === 'Enter'){ e.preventDefault(); sendKey('\r'); }
+    else if (e.key === 'Backspace' && !cmdEl.value){ e.preventDefault(); sendKey('\b'); }
+    else if (e.key === 'Escape'){ e.preventDefault(); sendKey('\x1b'); }
+    return;
+  }
+  if (e.key === 'Enter') exec(cmdEl.value);
+});
+cmdEl.addEventListener('input', () => { if (!dataMode()) return; const v = cmdEl.value; cmdEl.value = ''; for (const ch of v) sendKey(ch); });
+$('#crt').addEventListener('click', e => { if (!e.target.closest('button')) cmdEl.focus({preventScroll: true}); });
+const KEYMAP = {Enter: '\r', Backspace: '\b', Escape: '\x1b', Tab: '\t'};
+document.addEventListener('keydown', e => {
+  if (!dataMode() || e.target === cmdEl || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.matches && e.target.matches('input:not([type=checkbox]), select, textarea')) return;
+  const ch = KEYMAP[e.key] || (e.key.length === 1 ? e.key : null);
+  if (!ch) return;
+  e.preventDefault();
+  cmdEl.focus({preventScroll: true});
+  sendKey(ch);
+}, true);
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); }, true);
+$('#btnDial').addEventListener('click', () => { const v = cmdEl.value.trim(); exec(/^AT.*D/i.test(v) ? v : 'ATD' + $('#dialMode').value + '0191011'); });
+$('#btnHang').addEventListener('click', () => exec('ATH'));
+$('#optLine').addEventListener('change', applyLine);
+$('#optCoupler').addEventListener('change', applyLine);
+$('#optM2').addEventListener('change', e => { settings.speaker = e.target.checked ? 2 : 1; applyGain(); });
+line('sys', 'SIM-56 bereit. Enter schickt den Befehl ab – z. B. ATDT0191011 oder ATDP0191011 für die Wählscheibe.', null);
+
+/* ---------- wardialer ---------- */
+function renderWd(){
+  const el = $('#wdRes'); el.innerHTML = '';
+  for (const r of wdResults){
+    const dialable = ['carrier', 'cassandra', 'fax'].includes(r.oc);
+    const e = document.createElement(dialable ? 'button' : 'span');
+    e.className = 'r'; e.textContent = `${r.pre}-${r.x} ${WD_LABEL[r.oc]}`;
+    if (dialable){ e.title = 'Anwählen'; e.addEventListener('click', () => { cmdEl.value = 'ATDT' + r.pre + r.x; exec('ATDT' + r.pre + r.x); }); }
+    el.appendChild(e);
+  }
+}
+function startScan(){
+  ensureCtx(); if (ctx.state === 'suspended') ctx.resume();
+  hangup(true);
+  const pre = $('#wdPre').value.replace(/\D/g, ''), fs = $('#wdFrom').value.replace(/\D/g, ''), ts = $('#wdTo').value.replace(/\D/g, '');
+  const a = +fs, b = +ts, w = Math.max(fs.length, ts.length);
+  if (!fs || !ts || b < a){ line('err', 'Wardialer: „bis“ muss größer oder gleich „von“ sein', null); return; }
+  if (b - a > 199){ line('err', 'Wardialer: höchstens 200 Nummern pro Scan', null); return; }
+  const nums = []; for (let k = a; k <= b; k++) nums.push(String(k).padStart(w, '0'));
+  const n = nums.length, H = hashStr(pre + '|' + a + '|' + b);
+  const cass = H % n, faxI = n >= 6 ? (cass + 1 + (H >>> 8) % (n - 1)) % n : -1;
+  const outcomes = nums.map((x, i) => {
+    if (i === cass) return 'cassandra'; if (i === faxI) return 'fax';
+    const r = (hashStr(pre + x) % 1000) / 1000;
+    return r < .46 ? 'noanswer' : r < .66 ? 'busy' : r < .82 ? 'sit' : r < .93 ? 'voice' : 'carrier';
+  });
+  wd = {pre, nums, outcomes, idx: 0};
+  wdResults = []; renderWd();
+  $('#wdBtn').textContent = 'Scan stoppen';
+  line('sys', `Wardialer: ${n} Nummern, ${pre}-${nums[0]} bis ${pre}-${nums[n - 1]}`, null);
+  nextAttempt();
+}
+function nextAttempt(){
+  if (!wd) return;
+  if (wd.idx >= wd.nums.length){
+    const f = wdResults.filter(r => ['carrier', 'cassandra', 'fax'].includes(r.oc)).length;
+    hangup(true);
+    line('sys', `Scan beendet – ${f} Treffer. Treffer unten anklicken zum Anwählen.`, null);
+    return;
+  }
+  const x = wd.nums[wd.idx], full = wd.pre + x, oc = wd.outcomes[wd.idx];
+  session = buildAttempt(ctx.sampleRate, {region: $('#region').value, number: full, pulse: false, noise: $('#optNoise').checked, seed: hashStr(full), outcome: oc});
+  state = 'wardial'; logIdx = session.logs.length;
+  renderTimeline(); startSrc(0); applyGain();
+}
+function attemptDone(){
+  const x = wd.nums[wd.idx], oc = wd.outcomes[wd.idx], full = wd.pre + x;
+  const hit = ['carrier', 'cassandra', 'fax'].includes(oc);
+  line(hit ? 'res' : 'ts', `${wd.pre}-${x}  ${WD_LABEL[oc]}`, null);
+  if (hit) known.set(full, oc === 'carrier' ? 'bbs' : oc);
+  wdResults.push({pre: wd.pre, x, oc}); renderWd();
+  wd.idx++; nextAttempt();
+}
+$('#wdBtn').addEventListener('click', () => { if (wd){ hangup(true); line('sys', 'Scan abgebrochen', null); } else startScan(); });
+
+/* ---------- LEDs & LCD ---------- */
+const LEDS = [['HS','#ffb341'],['AA','#ff4b3a'],['CD','#ff4b3a'],['OH','#ff4b3a'],['RD','#ff4b3a'],['SD','#ff4b3a'],['TR','#ff4b3a'],['MR','#5cf08a']];
+$('#leds').innerHTML = LEDS.map(([n, c]) => `<div class="led" id="led-${n}" style="--c:${c}"><i></i>${n}</div>`).join('');
+const ledEls = Object.fromEntries(LEDS.map(([n]) => [n, $('#led-' + n)]));
+const setLed = (n, on) => ledEls[n].classList.toggle('on', !!on);
+let lcdText = '';
+function setLcd(t){ if (t !== lcdText){ lcdText = t; $('#lcd').textContent = t; } }
+
+/* ---------- timeline ---------- */
+const tlEl = $('#timeline');
+function renderTimeline(){
+  if (!session){ tlEl.innerHTML = '<div class="tl-empty">Wähle eine Nummer, dann erscheint hier der Ablauf des Verbindungsaufbaus</div>'; return; }
+  const D = session.dur;
+  tlEl.innerHTML = session.phases.map(p => `<div class="seg" style="left:${p.t0/D*100}%;width:${(p.t1-p.t0)/D*100}%;background:${p.color}" title="${p.name}">${p.name}</div>`).join('') + '<div class="playhead" id="ph"></div>';
+}
+tlEl.addEventListener('click', e => {
+  if (!session || state !== 'handshake') return;
+  const r = tlEl.getBoundingClientRect(), t = Math.max(0, Math.min(session.dur - .05, (e.clientX - r.left) / r.width * session.dur));
+  stopSrc(); resetLogsTo(t); startSrc(t);
+});
+
+/* ---------- canvases ---------- */
+const specC = $('#spec'), constC = $('#const'), scopeC = $('#scope');
+const sctx = specC.getContext('2d'), cctx = constC.getContext('2d'), octx = scopeC.getContext('2d');
+const DPR = () => Math.min(2, window.devicePixelRatio || 1);
+function fit(c){ const d = DPR(), w = Math.round(c.clientWidth * d), h = Math.round(c.clientHeight * d); if (c.width !== w || c.height !== h){ c.width = w; c.height = h; return true; } return false; }
+function paintSpecBg(){ sctx.fillStyle = '#05070a'; sctx.fillRect(0, 0, specC.width, specC.height); }
+(function layoutAxis(){
+  const ax = $('#axis');
+  for (let f = 500; f < 4000; f += 500){ const s = document.createElement('span'); s.style.top = (100 - f / 40) + '%'; s.textContent = (f / 1000).toString().replace('.', ',') + 'k'; ax.appendChild(s); }
+})();
+function resizeAll(){ if (fit(specC)) paintSpecBg(); fit(constC); fit(scopeC); }
+window.addEventListener('resize', resizeAll); resizeAll();
+
+const CMAP = (() => {
+  const stops = [[0,[5,7,10]],[.25,[32,22,84]],[.45,[140,28,122]],[.65,[242,104,24]],[.85,[255,222,90]],[1,[255,255,245]]];
+  const m = [];
+  for (let i = 0; i < 256; i++){ const x = i / 255; let k = 0; while (x > stops[k + 1][0]) k++;
+    const [x0, c0] = stops[k], [x1, c1] = stops[k + 1], f = (x - x0) / (x1 - x0);
+    m.push(c0.map((v, j) => Math.round(v + (c1[j] - v) * f))); }
+  return m;
+})();
+let fData, tData, colImg;
+const lineActive = () => state !== 'idle';
+
+function drawSpec(){
+  const W = specC.width, H = specC.height, step = Math.max(1, Math.round(DPR()));
+  if (!W || !H) return;
+  sctx.drawImage(specC, -step, 0);
+  if (!colImg || colImg.height !== H || colImg.width !== step) colImg = sctx.createImageData(step, H);
+  const nyq = ctx ? ctx.sampleRate / 2 : 24000, act = ctx && lineActive();
+  if (act) analyser.getByteFrequencyData(fData);
+  const d = colImg.data;
+  for (let y = 0; y < H; y++){
+    let v = 0;
+    if (act){ const b = (1 - y / H) * 4000 / nyq * fData.length, b0 = Math.floor(b), fr = b - b0; v = fData[b0] * (1 - fr) + (fData[b0 + 1] || 0) * fr; }
+    const c = CMAP[Math.max(0, Math.min(255, Math.round(v)))];
+    for (let x = 0; x < step; x++){ const o = (y * step + x) * 4; d[o] = c[0]; d[o+1] = c[1]; d[o+2] = c[2]; d[o+3] = 255; }
+  }
+  sctx.putImageData(colImg, W - step, 0);
+}
+function drawScope(){
+  const W = scopeC.width, H = scopeC.height;
+  octx.fillStyle = '#0a0d0b'; octx.fillRect(0, 0, W, H);
+  octx.strokeStyle = '#16241a'; octx.lineWidth = 1;
+  octx.beginPath(); octx.moveTo(0, H/2); octx.lineTo(W, H/2); octx.stroke();
+  if (!(ctx && lineActive())) return;
+  analyser.getFloatTimeDomainData(tData);
+  octx.strokeStyle = '#a4f5b4'; octx.lineWidth = 1.4 * DPR(); octx.beginPath();
+  for (let i = 0; i < 1024; i++){ const x = i / 1023 * W, y = H/2 - tData[i] * H * 0.9; i ? octx.lineTo(x, y) : octx.moveTo(x, y); }
+  octx.stroke();
+}
+
+const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 0.8;
+function fskTheta(e, tt){
+  const x = (tt - e.t0) * e.rate, k = Math.floor(x), f = x - k, step = TAU * e.df / e.rate;
+  let th = 0;
+  for (let j = 0; j < k && j < e.bits.length; j++) th += e.bits[j] === '1' ? step : -step;
+  if (k < e.bits.length) th += (e.bits[k] === '1' ? step : -step) * f;
+  return th;
+}
+function drawPhasor(thAt, t, R, col, cx, cy){
+  cctx.strokeStyle = col; cctx.fillStyle = col; cctx.lineWidth = 2 * DPR(); cctx.beginPath();
+  for (let j = 0; j <= 40; j++){ const th = thAt(t - (40 - j) * 0.0006), x = cx + Math.cos(th) * R, y = cy - Math.sin(th) * R; j ? cctx.lineTo(x, y) : cctx.moveTo(x, y); }
+  cctx.globalAlpha = .7; cctx.stroke(); cctx.globalAlpha = 1;
+  const th = thAt(t); cctx.beginPath(); cctx.arc(cx + Math.cos(th) * R, cy - Math.sin(th) * R, 5 * DPR(), 0, TAU); cctx.fill();
+}
+function drawEvents(events, t, cx, cy, R){
+  const act = events.filter(e => t >= e.t0 && t < e.t1), lbl = [];
+  let bitsHtml = '&nbsp;';
+  for (const e of act){
+    const col = e.dir === 'tx' ? '#ffb341' : '#5cf08a', dirTxt = e.dir === 'tx' ? 'TX' : 'RX';
+    lbl.push(`${dirTxt} ${e.label}`);
+    cctx.fillStyle = col; cctx.strokeStyle = col;
+    if (e.kind === 'qam' || e.kind === 'pcm'){
+      const N = e.syms.length / 2, k = Math.min(N - 1, Math.floor((t - e.t0) * e.baud) + (e.off || 0));
+      const Lc = e.kind === 'pcm' ? 160 : Math.min(120, Math.max(8, Math.round(e.baud * 0.05)));
+      const sc = e.kind === 'pcm' ? R * 1.25 : R * 0.92;
+      for (let j = Math.max(0, k - Lc); j <= k; j++){
+        const a = 1 - (k - j) / Lc; cctx.globalAlpha = 0.15 + 0.85 * a * a;
+        const x = cx + (e.syms[2*j] + gauss() * .035) * sc, y = cy - (e.syms[2*j+1] + gauss() * (e.kind === 'pcm' ? .6 : .035)) * sc;
+        cctx.fillRect(x - 1.6 * DPR(), y - 1.6 * DPR(), 3.2 * DPR(), 3.2 * DPR());
+      }
+      cctx.globalAlpha = 1;
+      if (e.bits){
+        const bi = Math.min(e.bits.length - 1, Math.floor((t - e.t0) * e.rate));
+        bitsHtml = `${dirTxt} ${e.bits.slice(Math.max(0, bi - 40), bi)}<em>${e.bits[bi]}</em>`;
+      } else if (e.kind === 'qam'){
+        let hx = ''; for (let j = Math.max(0, k - 28); j <= k; j++){ const v = ((e.syms[2*j] + 1.01) * 3.5 | 0) * 4 + ((e.syms[2*j+1] + 1.01) * 1.9 | 0); hx += (v & 15).toString(16).toUpperCase(); }
+        bitsHtml = `${dirTxt} Symbole ${hx.slice(0, -1)}<em>${hx.slice(-1)}</em>`;
+      }
+    } else if (e.kind === 'fsk'){
+      drawPhasor(tt => fskTheta(e, Math.max(e.t0, tt)), t, R * (e.dir === 'tx' ? .85 : .55), col, cx, cy);
+      const bi = Math.min(e.bits.length - 1, Math.floor((t - e.t0) * e.rate));
+      bitsHtml = `${dirTxt} ${e.bits.slice(Math.max(0, bi - 40), bi)}<em>${e.bits[bi]}</em>`;
+    } else if (e.kind === 'tone' && e.freq){
+      const th = (t * 2.2) % TAU;
+      cctx.beginPath(); cctx.arc(cx + Math.cos(th) * R * .55, cy - Math.sin(th) * R * .55, 4 * DPR(), 0, TAU); cctx.fill();
+      lbl[lbl.length - 1] += ` (${e.freq.join(' + ')} Hz)`;
+    } else if (e.kind === 'probe' || e.kind === 'noise'){
+      for (let j = 0; j < 21; j++){ const a = Math.random() * TAU, r = Math.random() * R * 1.1; cctx.globalAlpha = .5; cctx.fillRect(cx + Math.cos(a) * r, cy - Math.sin(a) * r, 2.5 * DPR(), 2.5 * DPR()); }
+      cctx.globalAlpha = 1;
+    }
+  }
+  return {label: lbl.length ? lbl.join(' | ') : 'kein Signal', bitsHtml};
+}
+function drawConst(t){
+  const W = constC.width, H = constC.height, cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.34;
+  cctx.fillStyle = 'rgba(10,13,11,0.55)'; cctx.fillRect(0, 0, W, H);
+  cctx.strokeStyle = '#16241a'; cctx.lineWidth = 1;
+  cctx.beginPath(); cctx.moveTo(0, cy); cctx.lineTo(W, cy); cctx.moveTo(cx, 0); cctx.lineTo(cx, H); cctx.stroke();
+  cctx.beginPath(); cctx.arc(cx, cy, R, 0, TAU); cctx.stroke();
+  let r = {label: 'kein Signal', bitsHtml: '&nbsp;'};
+  if (session && playing) r = drawEvents(session.events, t, cx, cy, R);
+  else if (state === 'online' && online && online.live){
+    const L = online.live, n = ctx.currentTime, C = session.hs.fsk;
+    drawPhasor(tt => L.theta('tx', tt), n, R * .85, '#ffb341', cx, cy);
+    drawPhasor(tt => L.theta('rx', tt), n, R * .55, '#5cf08a', cx, cy);
+    const tb = L.bitsUntil('tx', n, 36), rb = L.bitsUntil('rx', n, 36);
+    r = {label: `FSK-Zeiger · TX ${C.tx[0]}/${C.tx[1]} Hz, ${C.tx[2]} Bd · RX ${C.rx[0]}/${C.rx[1]} Hz, ${C.rx[2]} Bd`,
+         bitsHtml: `TX ${tb.slice(0, -1)}<em>${tb.slice(-1)}</em>\nRX ${rb.slice(0, -1)}<em>${rb.slice(-1)}</em>`};
+  } else if (state === 'online' && online && online.loop){
+    r = drawEvents(online.loop.events, (ctx.currentTime - online.loopStart) % online.loop.dur, cx, cy, R);
+  }
+  $('#constLbl').textContent = r.label;
+  $('#bits').innerHTML = r.bitsHtml;
+}
+
+/* ---------- main loop ---------- */
+let lastPerf = performance.now();
+function tick(){
+  const pn = performance.now(), dt = Math.min(0.25, (pn - lastPerf) / 1000); lastPerf = pn;
+  if (ctx && !fData){ fData = new Uint8Array(analyser.frequencyBinCount); tData = new Float32Array(analyser.fftSize); }
+  const t = session ? now() : 0;
+  drawSpec(); drawScope(); drawConst(t);
+
+  if (session && playing && t >= session.dur){ stopSrc(); offset = session.dur; }
+  if (state === 'handshake'){
+    flushLogs(Math.min(t, session.dur + 1));
+    const hs = session.hs;
+    if (hs.fax){ if (!playing){ flushLogs(1e9); hangup(true); line('res', 'NO CARRIER', null); } }
+    else if (hs.fsk ? t >= hs.connectT - 0.12 : (t >= hs.connectT + 0.35 || (!playing && t >= hs.connectT))) goOnline();
+  } else if (state === 'online'){
+    flushLogs(playing ? t : 1e9);
+    processOnline(dt);
+  } else if (state === 'wardial' && !playing){
+    attemptDone();
+  }
+  if (!$('#crt').hidden) term.draw();
+  updatePanel(session ? now() : 0);
+  requestAnimationFrame(tick);
+}
+
+function updatePanel(t){
+  if (state === 'idle' || !session){
+    for (const n in ledEls) setLed(n, n === 'MR' || n === 'TR');
+    return;
+  }
+  const hs = session.hs;
+  const act = playing ? session.events.filter(e => t >= e.t0 && t < e.t1) : [];
+  let rd = act.some(e => e.dir === 'rx' && e.kind !== 'tone'), sd = act.some(e => e.dir === 'tx');
+  const conn = state === 'online' || (state === 'handshake' && t >= hs.connectT);
+  if (state === 'online' && online){
+    const n = ctx.currentTime;
+    if (online.live){ rd = online.live.active('rx', n); sd = online.live.active('tx', n); }
+    else { rd = (!!online.fastQ || !!online.demoQ || !!zm) && Math.random() < .7; sd = n < online.sdUntil || (!!zm && Math.random() < .15); }
+    if (online.demoQ) rd = Math.random() < .7;
+  }
+  setLed('OH', true); setLed('TR', true); setLed('MR', true); setLed('AA', false);
+  setLed('CD', conn); setLed('HS', conn && hs.rate >= 9600); setLed('RD', rd); setLed('SD', sd);
+  const cur = session.phases.find(p => t >= p.t0 && t < p.t1);
+  if (state === 'wardial' && wd){
+    setLcd('SCAN ' + (wd.idx + 1));
+    $('#phaseName').textContent = `Wardialer ${wd.pre}-${wd.nums[wd.idx]} · ${cur ? cur.name : '…'}`;
+  } else if (zm){
+    setLcd('ZM ' + Math.floor(zm.pos / zm.file.size * 100) + '%');
+    $('#phaseName').textContent = `Zmodem · ${zm.file.name}`;
+  } else {
+    setLcd(conn ? (hs.rateLabel || String(hs.rate)) : cur ? cur.name.split(' · ')[0].toUpperCase().slice(0, 9) : 'OH');
+    $('#phaseName').textContent = conn ? (hs.fax ? 'Fax · 9600 bit/s' : `verbunden · ${hs.rateLabel || hs.rate} bit/s`) : (cur ? cur.name : '…');
+  }
+  const phEl = $('#ph'); if (phEl) phEl.style.left = Math.min(100, t / session.dur * 100) + '%';
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
